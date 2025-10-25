@@ -62,9 +62,34 @@ Content-Type: application/json
 
 ### Prerequisites
 - Python 3.12+
-- pip
+- pip or Poetry
 
 ### Setup
+
+#### Option 1: Using Poetry (Recommended)
+
+1. **Install Poetry:**
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+# Or: pip install poetry
+```
+
+2. **Install dependencies:**
+```bash
+poetry install
+```
+
+3. **Run the service:**
+```bash
+# Development with auto-reload
+poetry run uvicorn main:app --reload --port 8000
+
+# Or activate poetry shell first
+poetry shell
+uvicorn main:app --reload --port 8000
+```
+
+#### Option 2: Using pip
 
 1. **Create virtual environment:**
 ```bash
@@ -83,7 +108,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
 # Or use the main.py directly
-python -m ml_classifier_service.main
+python main.py
 ```
 
 4. **Access the API:**
@@ -146,6 +171,8 @@ Invoke-WebRequest -Uri http://localhost:8000/classify/ `
 ```
 ml_classifier_service/
 ├── main.py                     # FastAPI application entry point
+├── pyproject.toml              # Poetry dependencies and config
+├── requirements.txt            # pip dependencies (alternative)
 ├── api/
 │   ├── routes/
 │   │   ├── classification.py   # Classification endpoints
@@ -157,6 +184,10 @@ ml_classifier_service/
 │   │   └── heuristic.py        # Heuristic classifier implementation
 │   └── models/
 │       └── task_type.py        # Domain enums
+├── infrastructure/             # Infrastructure layer (Phase 2 placeholders)
+│   ├── database.py             # PostgreSQL connection & repositories
+│   ├── cache.py                # Redis caching
+│   └── messaging.py            # RabbitMQ event handling
 └── tests/
     ├── unit/                   # Unit tests
     └── integration/            # Integration tests
