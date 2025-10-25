@@ -9,7 +9,6 @@ public class LlmRequest
     public required List<LlmMessage> Messages { get; init; }
     public double Temperature { get; init; } = 0.3;
     public int MaxTokens { get; init; } = 4000;
-    public CancellationToken CancellationToken { get; init; }
 }
 
 /// <summary>

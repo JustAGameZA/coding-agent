@@ -18,6 +18,19 @@ public class IterativeStrategy : IExecutionStrategy
     private const int MaxIterations = 3;
     private const int TimeoutSeconds = 60;
     private const string ModelName = "gpt-4o";
+    private const int MaxTokensPerRequest = 4000;
+    private const double DefaultTemperature = 0.3;
+    
+    // Precompiled regex patterns for performance and to prevent catastrophic backtracking
+    private static readonly Regex FilePatternRegex = new(
+        @"FILE:\s*(.+)",
+        RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+    
+    private static readonly Regex CodeBlockPatternRegex = new(
+        @"```(\w+)?\s*\n(.*?)\n```",
+        RegexOptions.Compiled | RegexOptions.Singleline,
+        TimeSpan.FromSeconds(2));
 
     private readonly ILlmClient _llmClient;
     private readonly ICodeValidator _validator;
@@ -93,9 +106,8 @@ public class IterativeStrategy : IExecutionStrategy
                 {
                     Model = ModelName,
                     Messages = conversationHistory,
-                    Temperature = 0.3,
-                    MaxTokens = 4000,
-                    CancellationToken = linkedCts.Token
+                    Temperature = DefaultTemperature,
+                    MaxTokens = MaxTokensPerRequest
                 };
 
                 LlmResponse llmResponse;
@@ -324,26 +336,49 @@ Important:
     private List<CodeChange> ParseCodeChanges(string content)
     {
         var changes = new List<CodeChange>();
-        var filePattern = @"FILE:\s*(.+)";
-        var codeBlockPattern = @"```(\w+)?\s*\n(.*?)\n```";
-
-        var fileMatches = Regex.Matches(content, filePattern);
-        var codeMatches = Regex.Matches(content, codeBlockPattern, RegexOptions.Singleline);
-
-        for (int i = 0; i < Math.Min(fileMatches.Count, codeMatches.Count); i++)
+        
+        try
         {
-            var filePath = fileMatches[i].Groups[1].Value.Trim();
-            var language = codeMatches[i].Groups[1].Value;
-            var code = codeMatches[i].Groups[2].Value;
+            var fileMatches = FilePatternRegex.Matches(content);
+            var codeMatches = CodeBlockPatternRegex.Matches(content);
 
-            changes.Add(new CodeChange
+            // Log mismatch if FILE declarations and code blocks don't align
+            if (fileMatches.Count != codeMatches.Count)
             {
-                FilePath = filePath,
-                Language = string.IsNullOrWhiteSpace(language) ? null : language,
-                Content = code
-            });
-        }
+                _logger.LogWarning(
+                    "Mismatch between FILE declarations ({FileCount}) and code blocks ({CodeBlockCount}). " +
+                    "Using minimum count to avoid silent data loss.",
+                    fileMatches.Count, codeMatches.Count);
+            }
 
-        return changes;
+            var matchCount = Math.Min(fileMatches.Count, codeMatches.Count);
+            
+            if (matchCount == 0)
+            {
+                _logger.LogWarning("No FILE declarations or code blocks found in LLM response");
+                return changes;
+            }
+
+            for (int i = 0; i < matchCount; i++)
+            {
+                var filePath = fileMatches[i].Groups[1].Value.Trim();
+                var language = codeMatches[i].Groups[1].Value;
+                var code = codeMatches[i].Groups[2].Value;
+
+                changes.Add(new CodeChange
+                {
+                    FilePath = filePath,
+                    Language = string.IsNullOrWhiteSpace(language) ? null : language,
+                    Content = code
+                });
+            }
+
+            return changes;
+        }
+        catch (RegexMatchTimeoutException ex)
+        {
+            _logger.LogError(ex, "Regex timeout while parsing code changes - possible DoS attempt or malformed input");
+            return changes;
+        }
     }
 }

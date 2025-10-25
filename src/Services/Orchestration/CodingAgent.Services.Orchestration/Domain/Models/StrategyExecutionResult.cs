@@ -39,13 +39,24 @@ public class StrategyExecutionResult
         TimeSpan duration,
         int iterationsUsed = 0)
     {
+        // Optimize error list construction - avoid intermediate collections
+        var allErrors = new List<string>(capacity: 1 + (errors?.Count ?? 0))
+        {
+            errorMessage
+        };
+        
+        if (errors is { Count: > 0 })
+        {
+            allErrors.AddRange(errors);
+        }
+        
         return new StrategyExecutionResult
         {
             Success = false,
             TotalTokensUsed = tokensUsed,
             TotalCostUSD = cost,
             Duration = duration,
-            Errors = new List<string> { errorMessage }.Concat(errors).ToList(),
+            Errors = allErrors,
             IterationsUsed = iterationsUsed
         };
     }
