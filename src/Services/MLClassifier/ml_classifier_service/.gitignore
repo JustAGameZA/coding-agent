@@ -37,3 +37,9 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+
+# ML Models (keep dummy models, but ignore future large models)
+models/*.pkl
+models/*.json
+!models/model_v1.0.0-dummy.*
+!models/README.md

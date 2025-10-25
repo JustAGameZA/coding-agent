@@ -8,11 +8,11 @@ prometheus-fastapi-instrumentator==6.1.0
 # HTTP client for external services
 httpx==0.27.2
 
-# Future ML dependencies (currently unused but prepared)
-# scikit-learn==1.5.2
-# xgboost==2.1.1
-# numpy==2.1.2
-# pandas==2.2.3
+# ML dependencies for XGBoost classifier
+scikit-learn==1.5.2
+xgboost==2.1.1
+numpy==2.1.2
+pandas==2.2.3
 
 # Future database support (currently unused but prepared)
 # asyncpg==0.29.0
