@@ -20,10 +20,15 @@
 - ✅ Angular 20.3 dashboard scaffold (Material + SignalR dep)
 - ✅ Observability stack configured end-to-end (OpenTelemetry → Prometheus/Grafana/Jaeger + Seq)
 
-Next up: Phase 2 — Core services implementation focus
-- Chat: harden REST API (validation, auth), add pagination/search; finalize SignalR auth
-- Orchestration: domain model + strategy implementations
-- ML Classifier: integrate heuristic API with Orchestration; prep ML stage
+**Phase 2 Batch 2 Complete!** ✅ (Issue #105 closed 2025-10-25)
+- ✅ Chat Service API enhancements: pagination (#86), full-text search (#91), Redis caching (#94)
+- ✅ All 113 tests passing with trait categorization (Unit: 82 tests, 382ms; Integration: 31 tests, 6-9s)
+- ✅ PR #113 (search), PR #114 (cache), PR #115 (pagination) merged
+
+Next up: Phase 2 Batch 3 — Finalize Chat Service
+- SignalR hub authentication and presence tracking
+- File attachments (multipart upload + cloud storage)
+- Begin Orchestration service domain model
 
 ---
 
@@ -188,6 +193,17 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 
 ### Week 7-8: Chat Service
 
+**Phase 2 Batch 2 Complete!** ✅ (Issue #105 closed 2025-10-25)
+- ✅ PR #113: Full-text search with PostgreSQL GIN indexes
+- ✅ PR #114: Redis message caching with cache-aside pattern
+- ✅ PR #115: Pagination with HATEOAS Link headers
+- ✅ All 113 tests passing (82 unit, 31 integration) with trait tags
+- ✅ Test filtering enabled: `dotnet test --filter "Category=Unit"` (382ms)
+
+**Remaining Work:**
+- SignalR hub auth + presence tracking
+- File attachments (multipart upload + storage)
+
 **Days 1-2: Domain Model & Repository**
 - ✅ Implement entities (Conversation, Message)
 - [ ] Create repository pattern with EF Core (endpoints currently use DbContext)
@@ -197,10 +213,10 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 
 **Days 3-5: REST API**
 - ✅ Implement core endpoints (list/get/create/delete conversations)
-- [ ] Add pagination (page size: 50)
-- [ ] Implement search (full-text via PostgreSQL)
+- ✅ Add pagination (page size: 50) — **PR #115 merged 2025-10-25**
+- ✅ Implement search (full-text via PostgreSQL) — **PR #113 merged 2025-10-25**
 - ✅ Integration tests (Testcontainers) with in-memory fallback when Docker unavailable
-- **Deliverable**: REST API functional; add pagination/search and expand tests
+- **Deliverable**: ✅ **COMPLETE** — REST API with pagination + search, 113 tests passing
 
 **Days 6-8: SignalR WebSocket**
 - ✅ Implement `/hubs/chat` SignalR hub
@@ -213,9 +229,9 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 **Days 9-10: File Upload & Cache**
 - [ ] Implement multipart file upload
 - [ ] Store files in Azure Blob / S3
-- [ ] Cache last 100 messages in Redis
-- [ ] Add cache invalidation on new messages
-- **Deliverable**: File attachments working, cache hit rate > 80%
+- ✅ Cache last 100 messages in Redis — **PR #114 merged 2025-10-25**
+- ✅ Add cache invalidation on new messages
+- **Deliverable**: Cache complete, target hit rate > 80%; file attachments pending
 
 ### Week 9-10: Orchestration Service
 
