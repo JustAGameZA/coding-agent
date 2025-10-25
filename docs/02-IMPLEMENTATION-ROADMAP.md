@@ -4,7 +4,7 @@
 **Start Date**: October 2025
 **Target Completion**: May 2026
 **Team Size**: 1 developer + AI assistance (GitHub Copilot)
-**Current Phase**: Phase 1 Complete → Transitioning to Phase 2 (Core Services)
+**Current Phase**: Phase 2 In Progress (Core Services)
 **Last Updated**: October 25, 2025
 
 ---
@@ -25,10 +25,21 @@
 - ✅ All 113 tests passing with trait categorization (Unit: 82 tests, 382ms; Integration: 31 tests, 6-9s)
 - ✅ PR #113 (search), PR #114 (cache), PR #115 (pagination) merged
 
-Next up: Phase 2 Batch 3 — Finalize Chat Service
+**Phase 2 Orchestration Batch 1 Complete!** ✅ (Epic #109 closed 2025-10-25)
+- ✅ Task domain model implemented (#89)
+- ✅ SingleShot strategy implemented (#95) via PR #117 (merged)
+- ✅ Iterative strategy implemented (#88)
+- ✅ Unit test suite updated and green across solution; Orchestration integration tests intentionally skipped (manual, require API keys)
+
+Next up (priority): Phase 2 Orchestration Batch 2 — API & Integration
+- Implement task CRUD endpoints and SSE logs streaming
+- Integrate ML Classifier (classification) and GitHub Service (PR creation)
+- Publish TaskCreated/TaskCompleted/TaskFailed events (validate end-to-end)
+- Add Testcontainers integration tests for orchestration API
+
+In parallel: Phase 2 Batch 3 — Finalize Chat Service
 - SignalR hub authentication and presence tracking
 - File attachments (multipart upload + cloud storage)
-- Begin Orchestration service domain model
 
 ---
 
@@ -236,18 +247,18 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 ### Week 9-10: Orchestration Service
 
 **Days 1-3: Task Domain Model**
-- [ ] Implement entities (CodingTask, TaskExecution, ExecutionResult)
-- [ ] Create repository pattern
-- [ ] Add state machine for TaskStatus transitions
-- [ ] Write unit tests for state transitions
-- **Deliverable**: Task domain logic complete
+- ✅ Implement entities (CodingTask, TaskExecution, ExecutionResult) — #89
+- ✅ Create repository pattern — #89
+- ✅ Add state machine for TaskStatus transitions — #89
+- ✅ Write unit tests for state transitions — #89
+- **Deliverable**: ✅ Completed — Task domain logic implemented and tested (Issue #89 closed)
 
 **Days 4-6: Execution Strategies**
-- [ ] Implement `SingleShotStrategy` (simple tasks)
-- [ ] Implement `IterativeStrategy` (medium tasks)
+- ✅ Implement `SingleShotStrategy` (simple tasks) — #95 (PR #117 merged)
+- ✅ Implement `IterativeStrategy` (medium tasks) — #88
 - [ ] Implement `MultiAgentStrategy` (complex tasks)
 - [ ] Add strategy selector (based on complexity)
-- **Deliverable**: All 3 strategies implemented and tested
+- **Deliverable**: ▶ Partially complete — SingleShot + Iterative done; MultiAgent and selector pending
 
 **Days 7-9: REST API & Integration**
 - [ ] Implement task CRUD endpoints
@@ -257,10 +268,10 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 - **Deliverable**: Full task lifecycle working
 
 **Day 10: Event Publishing**
-- [ ] Publish `TaskCreatedEvent`, `TaskCompletedEvent`, `TaskFailedEvent`
-- [ ] Configure MassTransit message bus
-- [ ] Add retry logic (3 retries with exponential backoff)
-- **Deliverable**: Events published to RabbitMQ
+- ✅ Publish `TaskCreatedEvent`, `TaskCompletedEvent`, `TaskFailedEvent` — #83
+- ✅ Configure MassTransit message bus — base wiring in place across services
+- ✅ Add retry logic (3 retries with exponential backoff) — #83
+- **Deliverable**: ✅ Baseline event publishing implemented (Issue #83 closed); end-to-end validation will be finalized in API & Integration
 
 ### Week 11-12: ML Classifier Service
 
@@ -595,10 +606,10 @@ Fix bugs, optimize performance, complete documentation.
 
 ## Next Steps
 
-1. Phase 2 kickoff: Chat REST API hardening (validation, auth) and pagination/search
-2. Orchestration: implement domain entities and begin SingleShot/Iterative strategies
-3. ML Classifier: wire heuristic service to Orchestration; prepare ML stage scaffolding
-4. Expand integration/unit tests; add CI gates for coverage thresholds
+1. Orchestration (Batch 2): Implement task CRUD + SSE logs, integrate ML Classifier and GitHub Service, and validate event publishing end-to-end.
+2. Chat: Add SignalR hub authentication + presence tracking, implement file attachments (multipart + storage).
+3. ML Classifier: Scaffold FastAPI service and implement heuristic classifier; prepare ML/XGBoost stage and training hooks.
+4. Testing/CI: Add Testcontainers-based integration tests for Orchestration; enforce coverage thresholds in CI.
 
 ---
 
