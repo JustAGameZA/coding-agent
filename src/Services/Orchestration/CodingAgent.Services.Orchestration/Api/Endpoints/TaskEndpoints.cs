@@ -14,6 +14,9 @@ namespace CodingAgent.Services.Orchestration.Api.Endpoints;
 /// </summary>
 public static class TaskEndpoints
 {
+    // TODO: Replace with authenticated user from JWT when auth is implemented
+    private const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
+
     /// <summary>
     /// Maps task-related endpoints.
     /// </summary>
@@ -162,7 +165,7 @@ public static class TaskEndpoints
         CancellationToken ct = default)
     {
         // TODO: Replace with authenticated user when auth is wired
-        var userId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var userId = Guid.Parse(DefaultUserId);
 
         logger.LogInformation(
             "Getting tasks (page: {Page}, pageSize: {PageSize}, status: {Status}, type: {Type})",
@@ -247,7 +250,7 @@ public static class TaskEndpoints
         logger.LogInformation("Creating task: {Title}", request.Title);
 
         // TODO: Replace with authenticated user when auth is wired
-        var userId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var userId = Guid.Parse(DefaultUserId);
 
         var task = await taskService.CreateTaskAsync(userId, request.Title, request.Description, ct);
         var dto = MapToTaskDto(task);
@@ -297,9 +300,14 @@ public static class TaskEndpoints
             await taskService.DeleteTaskAsync(id, ct);
             return Results.NoContent();
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            logger.LogWarning(ex, "Task {TaskId} not found", id);
+            return Results.NotFound();
+        }
         catch (InvalidOperationException ex)
         {
-            logger.LogWarning(ex, "Failed to delete task {TaskId}", id);
+            logger.LogWarning(ex, "Cannot delete task {TaskId}", id);
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
     }

@@ -48,11 +48,14 @@ builder.Services.AddScoped<IValidator<ExecuteTaskRequest>, ExecuteTaskRequestVal
 // Configure rate limiting - 10 executions per hour per user
 builder.Services.AddRateLimiter(options =>
 {
+    // Default user ID constant - TODO: Replace with authenticated user from JWT
+    const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
         // Get user ID from context (for now using a default, will be replaced with actual auth)
         var userId = context.Request.Headers["X-User-Id"].FirstOrDefault() 
-            ?? "00000000-0000-0000-0000-000000000001";
+            ?? DefaultUserId;
 
         // Only apply rate limiting to execution endpoints
         if (context.Request.Path.StartsWithSegments("/tasks") && 
