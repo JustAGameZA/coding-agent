@@ -34,7 +34,7 @@ public class GeneratedCode
 }
 ```",
             TokensUsed = 150,
-            CostUSD = 0.003m,
+            Cost = 0.001m, // Mock cost: ~$0.001 per call
             Model = request.Model
         };
 

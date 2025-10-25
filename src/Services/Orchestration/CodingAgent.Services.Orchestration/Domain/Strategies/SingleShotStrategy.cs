@@ -35,10 +35,10 @@ public class SingleShotStrategy : IExecutionStrategy
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
     }
 
-    public async Task<ExecutionResult> ExecuteAsync(
+    public async Task<StrategyExecutionResult> ExecuteAsync(
         CodingTask task,
         TaskExecutionContext context,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         if (task == null)
         {
@@ -55,7 +55,6 @@ public class SingleShotStrategy : IExecutionStrategy
         activity?.SetTag("task.type", task.Type);
 
         var stopwatch = Stopwatch.StartNew();
-        var executionId = Guid.NewGuid();
 
         try
         {
@@ -82,7 +81,7 @@ public class SingleShotStrategy : IExecutionStrategy
                 MaxTokens = 4000
             };
 
-            var response = await _llmClient.GenerateAsync(llmRequest, ct);
+            var response = await _llmClient.GenerateAsync(llmRequest, cancellationToken);
 
             activity?.SetTag("tokens.used", response.TokensUsed);
             activity?.SetTag("cost.usd", response.Cost);
@@ -99,17 +98,19 @@ public class SingleShotStrategy : IExecutionStrategy
                 var errorMessage = "No code changes could be parsed from LLM response";
                 _logger.LogWarning(errorMessage);
                 
-                var failedResult = new ExecutionResult(executionId, false, response.TokensUsed, response.Cost);
-                failedResult.SetError(errorMessage);
-                
                 stopwatch.Stop();
                 activity?.SetStatus(ActivityStatusCode.Error, errorMessage);
-                return failedResult;
+                return StrategyExecutionResult.CreateFailure(
+                    errorMessage,
+                    new List<string>(),
+                    response.TokensUsed,
+                    response.Cost,
+                    stopwatch.Elapsed);
             }
 
             // 4. Validate changes
             _logger.LogDebug("Validating {ChangeCount} code changes", changes.Count);
-            var validationResult = await _validator.ValidateAsync(changes, ct);
+            var validationResult = await _validator.ValidateAsync(changes, cancellationToken);
 
             if (!validationResult.IsSuccess)
             {
@@ -118,50 +119,55 @@ public class SingleShotStrategy : IExecutionStrategy
                     "Validation failed for task {TaskId}: {Errors}",
                     task.Id, string.Join("; ", validationResult.Errors));
 
-                var failedResult = new ExecutionResult(executionId, false, response.TokensUsed, response.Cost);
-                failedResult.SetError(errorMessage);
-
                 stopwatch.Stop();
                 activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
-                return failedResult;
+                return StrategyExecutionResult.CreateFailure(
+                    errorMessage,
+                    validationResult.Errors.ToList(),
+                    response.TokensUsed,
+                    response.Cost,
+                    stopwatch.Elapsed);
             }
 
-            // 5. Calculate metrics
-            var (filesChanged, linesAdded, linesRemoved) = CalculateMetrics(changes);
-
-            // 6. Return success result
-            var successResult = new ExecutionResult(executionId, true, response.TokensUsed, response.Cost);
-            var changesJson = System.Text.Json.JsonSerializer.Serialize(changes);
-            successResult.SetChanges(changesJson, filesChanged, linesAdded, linesRemoved);
-
+            // 5. Return success result
             stopwatch.Stop();
             _logger.LogInformation(
                 "SingleShot execution completed successfully for task {TaskId}. " +
-                "Files: {Files}, Lines Added: {Added}, Lines Removed: {Removed}, Duration: {Duration}ms",
-                task.Id, filesChanged, linesAdded, linesRemoved, stopwatch.ElapsedMilliseconds);
+                "Files: {Files}, Duration: {Duration}ms",
+                task.Id, changes.Count, stopwatch.ElapsedMilliseconds);
 
             activity?.SetStatus(ActivityStatusCode.Ok);
-            return successResult;
+            return StrategyExecutionResult.CreateSuccess(
+                changes,
+                response.TokensUsed,
+                response.Cost,
+                stopwatch.Elapsed);
         }
         catch (OperationCanceledException)
         {
+            stopwatch.Stop();
             _logger.LogWarning("SingleShot execution cancelled for task {TaskId}", task.Id);
             activity?.SetStatus(ActivityStatusCode.Error, "Cancelled");
             
-            var cancelledResult = new ExecutionResult(executionId, false, 0, 0);
-            cancelledResult.SetError("Execution was cancelled");
-            return cancelledResult;
+            return StrategyExecutionResult.CreateFailure(
+                "Execution was cancelled",
+                new List<string>(),
+                0,
+                0,
+                stopwatch.Elapsed);
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
             _logger.LogError(ex, "SingleShot execution failed for task {TaskId}", task.Id);
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
 
-            var errorResult = new ExecutionResult(executionId, false, 0, 0);
-            errorResult.SetError($"Execution failed: {ex.Message}");
-            
-            stopwatch.Stop();
-            return errorResult;
+            return StrategyExecutionResult.CreateFailure(
+                $"Execution failed: {ex.Message}",
+                new List<string> { ex.ToString() },
+                0,
+                0,
+                stopwatch.Elapsed);
         }
     }
 
@@ -233,7 +239,7 @@ Generate the code changes now:";
         var changes = new List<CodeChange>();
         
         // Pattern to match FILE: declarations
-        var filePattern = @"FILE:\s*(.+?)(?:\r?\n|$)";
+                    var filePattern = @"FILE:\s*([^\r\n]+)";
         // Pattern to match code blocks with optional language
         var codePattern = @"```(\w+)?\r?\n(.*?)\r?\n```";
 
@@ -244,18 +250,36 @@ Generate the code changes now:";
             "Parsing LLM response: found {FileMatches} file declarations and {CodeBlocks} code blocks",
             fileMatches.Count, codeMatches.Count);
 
-        // Match file paths with code blocks
-        int codeIndex = 0;
-        foreach (Match fileMatch in fileMatches)
+        // Improved matching: Find code block immediately following each FILE declaration
+        for (int fileIndex = 0; fileIndex < fileMatches.Count; fileIndex++)
         {
-            if (codeIndex >= codeMatches.Count)
+            var fileMatch = fileMatches[fileIndex];
+            var filePath = fileMatch.Groups[1].Value.Trim();
+            var filePosition = fileMatch.Index + fileMatch.Length;
+
+            // Find the next code block after this FILE declaration
+            Match? codeMatch = null;
+            int closestDistance = int.MaxValue;
+
+            foreach (Match potentialCodeMatch in codeMatches)
             {
-                _logger.LogWarning("More file declarations than code blocks found");
-                break;
+                if (potentialCodeMatch.Index > filePosition)
+                {
+                    var distance = potentialCodeMatch.Index - filePosition;
+                    if (distance < closestDistance)
+                    {
+                        closestDistance = distance;
+                        codeMatch = potentialCodeMatch;
+                    }
+                }
             }
 
-            var filePath = fileMatch.Groups[1].Value.Trim();
-            var codeMatch = codeMatches[codeIndex];
+            if (codeMatch == null)
+            {
+                _logger.LogWarning("No code block found after FILE declaration: {FilePath}", filePath);
+                continue;
+            }
+
             var language = codeMatch.Groups[1].Value;
             var codeContent = codeMatch.Groups[2].Value;
 
@@ -272,8 +296,13 @@ Generate the code changes now:";
                 Language = language,
                 Type = ChangeType.Modify
             });
+        }
 
-            codeIndex++;
+        if (fileMatches.Count != codeMatches.Count)
+        {
+            _logger.LogWarning(
+                "Mismatch between FILE declarations ({FileCount}) and code blocks ({CodeBlockCount})",
+                fileMatches.Count, codeMatches.Count);
         }
 
         return changes;
@@ -304,38 +333,5 @@ Generate the code changes now:";
             ".css" => "css",
             _ => null
         };
-    }
-
-    private (int filesChanged, int linesAdded, int linesRemoved) CalculateMetrics(List<CodeChange> changes)
-    {
-        var filesChanged = changes.Count;
-        var linesAdded = 0;
-        var linesRemoved = 0;
-
-        foreach (var change in changes)
-        {
-            if (change.Type == ChangeType.Create || change.Type == ChangeType.Modify)
-            {
-                // Count non-empty lines in the new content
-                var lines = change.Content.Split('\n')
-                    .Select(l => l.Trim())
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .Count();
-                
-                linesAdded += lines;
-            }
-            else if (change.Type == ChangeType.Delete)
-            {
-                // Count non-empty lines in deleted content
-                var lines = change.Content.Split('\n')
-                    .Select(l => l.Trim())
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .Count();
-                
-                linesRemoved += lines;
-            }
-        }
-
-        return (filesChanged, linesAdded, linesRemoved);
     }
 }

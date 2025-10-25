@@ -130,11 +130,11 @@ public class IterativeStrategy : IExecutionStrategy
                 }
 
                 totalTokens += llmResponse.TokensUsed;
-                totalCost += llmResponse.CostUSD;
+                totalCost += llmResponse.Cost;
 
                 _logger.LogDebug(
                     "Iteration {Iteration} LLM response: {Tokens} tokens, ${Cost}",
-                    iteration + 1, llmResponse.TokensUsed, llmResponse.CostUSD);
+                        iteration + 1, llmResponse.TokensUsed, llmResponse.Cost);
 
                 // Add assistant response to history
                 conversationHistory.Add(new LlmMessage
@@ -225,7 +225,7 @@ public class IterativeStrategy : IExecutionStrategy
 
                     return StrategyExecutionResult.CreateFailure(
                         $"Max iterations ({MaxIterations}) exceeded without successful validation",
-                        validationResult.Errors,
+                            validationResult.Errors.ToList(),
                         totalTokens,
                         totalCost,
                         stopwatch.Elapsed,
