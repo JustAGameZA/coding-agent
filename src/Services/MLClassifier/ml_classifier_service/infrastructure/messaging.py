@@ -125,14 +125,45 @@ def get_publisher() -> EventPublisher:
 
 # Example event handlers for future implementation
 async def handle_task_completed(event_data: dict):
-    """Handle TaskCompletedEvent for collecting training data."""
-    logger.info(f"Handling TaskCompletedEvent: {event_data} (Phase 2 placeholder)")
+    """Handle TaskCompletedEvent for collecting training data.
+    
+    Event structure from .NET SharedKernel:
+    {
+        "EventId": "guid",
+        "OccurredAt": "datetime",
+        "TaskId": "guid",
+        "TaskType": "BugFix|Feature|Refactor|Test|Documentation|Deployment",
+        "Complexity": "Simple|Medium|Complex",
+        "Strategy": "SingleShot|Iterative|MultiAgent|HybridExecution",
+        "Success": bool,
+        "TokensUsed": int,
+        "CostUsd": decimal,
+        "Duration": "timespan",
+        "ErrorMessage": string? (optional)
+    }
+    """
+    logger.info(f"Handling TaskCompletedEvent: TaskId={event_data.get('TaskId')} (Phase 2 placeholder)")
+    
     # Future: Extract training sample from completed task
+    # This will be used to improve the classifier over time by learning
+    # from actual task outcomes vs. predicted classifications
+    
     # from infrastructure.database import get_training_repo
     # repo = get_training_repo()
-    # await repo.store_feedback({
-    #     "task_description": event_data["task_description"],
-    #     "predicted_type": event_data["predicted_type"],
-    #     "actual_type": event_data["actual_type"],
-    #     "success": event_data["success"]
-    # })
+    # 
+    # # Extract relevant training data
+    # training_sample = {
+    #     "task_id": event_data["TaskId"],
+    #     "task_type": event_data["TaskType"],
+    #     "complexity": event_data["Complexity"],
+    #     "strategy_used": event_data["Strategy"],
+    #     "success": event_data["Success"],
+    #     "tokens_used": event_data["TokensUsed"],
+    #     "cost_usd": float(event_data["CostUsd"]),
+    #     "duration_seconds": parse_timespan(event_data["Duration"]),
+    #     "error_message": event_data.get("ErrorMessage"),
+    #     "collected_at": datetime.utcnow()
+    # }
+    # 
+    # await repo.store_feedback(training_sample)
+    # logger.info(f"Stored training sample for task {event_data['TaskId']}")

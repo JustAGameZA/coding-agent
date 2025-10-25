@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from api.rate_limiter import limiter
-from api.routes import classification, health
+from api.routes import classification, health, training
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -57,6 +57,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(classification.router)
+app.include_router(training.router)
 
 # Expose Prometheus metrics at /metrics
 # Instrument after routers are included so all endpoints are covered

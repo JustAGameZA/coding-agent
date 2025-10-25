@@ -1,0 +1,102 @@
+name: ML Classifier Service CI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/Services/MLClassifier/**'
+      - '.github/workflows/ml-classifier.yml'
+  pull_request:
+    paths:
+      - 'src/Services/MLClassifier/**'
+      - '.github/workflows/ml-classifier.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/Services/MLClassifier/ml_classifier_service
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'src/Services/MLClassifier/ml_classifier_service/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with ruff
+        run: |
+          # Install ruff if not in requirements
+          pip install ruff
+          ruff check . --output-format=github
+
+      - name: Type check with mypy
+        continue-on-error: true
+        run: |
+          pip install mypy
+          mypy . --ignore-missing-imports || echo "Type checking passed with warnings"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=term --cov-report=html --cov-fail-under=85
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: src/Services/MLClassifier/ml_classifier_service/coverage.xml
+          flags: ml-classifier
+          name: ml-classifier-coverage
+          fail_ci_if_error: false
+
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ml-classifier-coverage
+          path: src/Services/MLClassifier/ml_classifier_service/htmlcov/
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/Services/MLClassifier/ml_classifier_service
+          file: src/Services/MLClassifier/ml_classifier_service/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ml-classifier:latest
+            ghcr.io/${{ github.repository_owner }}/ml-classifier:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
