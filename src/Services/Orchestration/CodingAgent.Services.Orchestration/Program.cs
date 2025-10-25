@@ -1,8 +1,13 @@
 using CodingAgent.Services.Orchestration.Api.Endpoints;
 using CodingAgent.Services.Orchestration.Domain.Repositories;
+using CodingAgent.Services.Orchestration.Domain.Services;
+using CodingAgent.Services.Orchestration.Domain.Strategies;
+using CodingAgent.Services.Orchestration.Infrastructure.LLM;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
+using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Infrastructure;
+using CodingAgent.SharedKernel.Infrastructure.Messaging;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
@@ -29,6 +34,18 @@ builder.Services.AddDbContext<OrchestrationDbContext>(options =>
 // Register repositories
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IExecutionRepository, ExecutionRepository>();
+
+// Register domain services
+builder.Services.AddScoped<ITaskService, TaskService>();
+
+// Register event publisher
+builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+
+// Register execution strategies and dependencies
+// TODO: Replace mock implementations with real LLM and validator implementations in future phases
+builder.Services.AddScoped<ILlmClient, MockLlmClient>();
+builder.Services.AddScoped<ICodeValidator, MockCodeValidator>();
+builder.Services.AddScoped<IExecutionStrategy, IterativeStrategy>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()
@@ -71,7 +88,7 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddPrometheusExporter());
 
-// MassTransit + RabbitMQ
+// MassTransit + RabbitMQ with event publishing configuration
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
@@ -79,7 +96,7 @@ builder.Services.AddMassTransit(x =>
 
     x.UsingRabbitMq((context, cfg) =>
     {
-        cfg.ConfigureRabbitMQHost(builder.Configuration, builder.Environment);
+        cfg.ConfigureEventPublishingForRabbitMq(builder.Configuration, builder.Environment);
         cfg.ConfigureEndpoints(context);
     });
 });

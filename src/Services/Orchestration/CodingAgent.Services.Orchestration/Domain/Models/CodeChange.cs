@@ -1,24 +1,14 @@
 namespace CodingAgent.Services.Orchestration.Domain.Models;
 
 /// <summary>
-/// Represents a code change parsed from LLM response
+/// Represents a code change to be applied.
 /// </summary>
 public class CodeChange
 {
-    public string FilePath { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public string? Language { get; set; }
-    public ChangeType Type { get; set; } = ChangeType.Modify;
-
-    public CodeChange() { }
-
-    public CodeChange(string filePath, string content, string? language = null, ChangeType type = ChangeType.Modify)
-    {
-        FilePath = filePath;
-        Content = content;
-        Language = language;
-        Type = type;
-    }
+    public required string FilePath { get; init; }
+    public required string Content { get; init; }
+    public string? Language { get; init; }
+    public ChangeType Type { get; init; } = ChangeType.Modify;
 }
 
 /// <summary>

@@ -1,32 +1,32 @@
 namespace CodingAgent.Services.Orchestration.Domain.Models;
 
 /// <summary>
-/// Request for LLM generation
+/// Represents a request to an LLM provider.
 /// </summary>
 public class LlmRequest
 {
-    public string Model { get; set; } = string.Empty;
-    public List<LlmMessage> Messages { get; set; } = new();
-    public double Temperature { get; set; } = 0.3;
-    public int MaxTokens { get; set; } = 4000;
+    public required string Model { get; init; }
+    public required List<LlmMessage> Messages { get; init; }
+    public double Temperature { get; init; } = 0.3;
+    public int MaxTokens { get; init; } = 4000;
 }
 
 /// <summary>
-/// Response from LLM generation
+/// Response from LLM generation.
 /// </summary>
 public class LlmResponse
 {
-    public string Content { get; set; } = string.Empty;
-    public int TokensUsed { get; set; }
-    public decimal Cost { get; set; }
-    public string? Model { get; set; }
+    public required string Content { get; init; }
+    public int TokensUsed { get; init; }
+    public decimal Cost { get; init; }
+    public string? Model { get; init; }
 }
 
 /// <summary>
-/// LLM message with role and content
+/// Represents a message in the conversation with the LLM.
 /// </summary>
 public class LlmMessage
 {
-    public string Role { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
+    public required string Role { get; init; } // "system", "user", "assistant"
+    public required string Content { get; init; }
 }
