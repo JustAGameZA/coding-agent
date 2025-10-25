@@ -19,6 +19,17 @@ public class TesterAgent : ITesterAgent
     private const double Temperature = 0.3;
     private const int MaxTokens = 4000;
 
+    // Precompiled regex patterns for parsing
+    private static readonly Regex FileRegex = new Regex(
+        @"FILE:\s*([^\r\n]+)",
+        RegexOptions.Multiline | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    private static readonly Regex CodeBlockRegex = new Regex(
+        @"```(\w+)?\r?\n(.*?)\r?\n```",
+        RegexOptions.Singleline | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(2));
+
     public TesterAgent(ILlmClient llmClient, ILogger<TesterAgent> logger)
     {
         _llmClient = llmClient ?? throw new ArgumentNullException(nameof(llmClient));
@@ -170,13 +181,9 @@ Rules:
 
         try
         {
-            // Pattern to match FILE: declarations
-            var filePattern = @"FILE:\s*([^\r\n]+)";
-            // Pattern to match code blocks with optional language
-            var codePattern = @"```(\w+)?\r?\n(.*?)\r?\n```";
-
-            var fileMatches = Regex.Matches(content, filePattern, RegexOptions.Multiline, TimeSpan.FromSeconds(1));
-            var codeMatches = Regex.Matches(content, codePattern, RegexOptions.Singleline, TimeSpan.FromSeconds(2));
+            // Use precompiled regex patterns
+            var fileMatches = FileRegex.Matches(content);
+            var codeMatches = CodeBlockRegex.Matches(content);
 
             _logger.LogDebug(
                 "TesterAgent: Parsing - found {FileMatches} FILE declarations and {CodeBlocks} code blocks",
@@ -193,8 +200,9 @@ Rules:
                 Match? codeMatch = null;
                 int closestDistance = int.MaxValue;
 
-                foreach (Match potentialCodeMatch in codeMatches)
+                for (int i = 0; i < codeMatches.Count; i++)
                 {
+                    var potentialCodeMatch = codeMatches[i];
                     if (potentialCodeMatch.Index > filePosition)
                     {
                         var distance = potentialCodeMatch.Index - filePosition;

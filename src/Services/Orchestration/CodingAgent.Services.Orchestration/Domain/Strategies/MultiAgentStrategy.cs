@@ -139,10 +139,9 @@ public class MultiAgentStrategy : IExecutionStrategy
                 }
             }
 
-            // Aggregate all code changes
-            var allChanges = coderResults
-                .Concat(allResults.Where(r => r.AgentName.StartsWith("Coder-")))
-                .Where(r => r.Success)
+            // Aggregate all code changes (avoid double-counting coderResults already added to allResults)
+            var allChanges = allResults
+                .Where(r => r.AgentName.StartsWith("Coder-") && r.Success)
                 .SelectMany(r => r.Changes)
                 .ToList();
 
@@ -245,11 +244,25 @@ public class MultiAgentStrategy : IExecutionStrategy
 
                 if (testResult.Success && testResult.Changes.Any())
                 {
-                    // Add test files to the final changes
-                    mergedChanges.AddRange(testResult.Changes);
+                    // Add test files to the final changes with simple conflict resolution (last-write-wins)
+                    var addedOrReplaced = 0;
+                    foreach (var testChange in testResult.Changes)
+                    {
+                        var existingIndex = mergedChanges.FindIndex(c => c.FilePath == testChange.FilePath);
+                        if (existingIndex >= 0)
+                        {
+                            mergedChanges[existingIndex] = testChange;
+                        }
+                        else
+                        {
+                            mergedChanges.Add(testChange);
+                        }
+                        addedOrReplaced++;
+                    }
+
                     _logger.LogInformation(
-                        "MultiAgent: Added {TestCount} test files",
-                        testResult.Changes.Count);
+                        "MultiAgent: Added {TestCount} test files (conflict resolution applied)",
+                        addedOrReplaced);
                 }
             }
             catch (Exception ex)

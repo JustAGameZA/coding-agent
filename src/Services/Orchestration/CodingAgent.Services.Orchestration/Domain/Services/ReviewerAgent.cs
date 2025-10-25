@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CodingAgent.Services.Orchestration.Domain.Entities;
 using CodingAgent.Services.Orchestration.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,12 @@ public class ReviewerAgent : IReviewerAgent
     private const string ModelName = "gpt-4o";
     private const double Temperature = 0.2; // Lower temperature for more consistent reviews
     private const int MaxTokens = 3000;
+
+    // Precompiled regex for extracting JSON blocks
+    private static readonly Regex JsonBlockRegex = new Regex(
+        @"```(?:json)?\s*(\{.*?\})\s*```",
+        RegexOptions.Singleline | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(2));
 
     public ReviewerAgent(ILlmClient llmClient, ILogger<ReviewerAgent> logger)
     {
@@ -181,10 +188,7 @@ Important:
         try
         {
             // Try to extract JSON from code blocks
-            var jsonMatch = System.Text.RegularExpressions.Regex.Match(
-                content,
-                @"```(?:json)?\s*(\{.*?\})\s*```",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
+            var jsonMatch = JsonBlockRegex.Match(content);
 
             var jsonContent = jsonMatch.Success ? jsonMatch.Groups[1].Value : content;
 
