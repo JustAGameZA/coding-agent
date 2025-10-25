@@ -188,11 +188,7 @@ static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
         .HandleTransientHttpError()
         .WaitAndRetryAsync(
             retryCount: 2,
-            sleepDurationProvider: retryAttempt => TimeSpan.FromMilliseconds(50),
-            onRetry: (outcome, timespan, retryCount, context) =>
-            {
-                // Log retry attempts if needed
-            });
+            sleepDurationProvider: _ => TimeSpan.FromMilliseconds(50));
 }
 
 static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
