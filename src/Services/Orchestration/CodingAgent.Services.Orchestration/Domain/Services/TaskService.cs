@@ -19,6 +19,7 @@ public class TaskService : ITaskService
     private readonly ITaskRepository _taskRepository;
     private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<TaskService> _logger;
+    private const string EntityName = nameof(CodingTask);
 
     public TaskService(
         ITaskRepository taskRepository,
@@ -61,7 +62,7 @@ public class TaskService : ITaskService
         CancellationToken cancellationToken = default)
     {
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+            ?? throw new CodingAgent.SharedKernel.Exceptions.NotFoundException(EntityName, taskId);
 
         task.UpdateDetails(title, description);
         await _taskRepository.UpdateAsync(task, cancellationToken);
@@ -74,7 +75,7 @@ public class TaskService : ITaskService
     public async Task DeleteTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
     {
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+            ?? throw new CodingAgent.SharedKernel.Exceptions.NotFoundException(EntityName, taskId);
 
         // Don't allow deletion of tasks that are in progress
         if (task.Status == TaskStatus.InProgress)
@@ -94,7 +95,7 @@ public class TaskService : ITaskService
         CancellationToken cancellationToken = default)
     {
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+            ?? throw new CodingAgent.SharedKernel.Exceptions.NotFoundException(EntityName, taskId);
 
         task.Classify(type, complexity);
         await _taskRepository.UpdateAsync(task, cancellationToken);
@@ -108,7 +109,7 @@ public class TaskService : ITaskService
         CancellationToken cancellationToken = default)
     {
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
-            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+            ?? throw new CodingAgent.SharedKernel.Exceptions.NotFoundException(EntityName, taskId);
 
         task.Start();
         await _taskRepository.UpdateAsync(task, cancellationToken);

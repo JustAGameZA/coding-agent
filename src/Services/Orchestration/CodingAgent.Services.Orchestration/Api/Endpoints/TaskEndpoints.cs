@@ -4,6 +4,9 @@ using CodingAgent.Services.Orchestration.Domain.Services;
 using CodingAgent.Services.Orchestration.Domain.Entities;
 using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.SharedKernel.Results;
+using CodingAgent.SharedKernel.Exceptions;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.Extensions.Primitives;
 using FluentValidation;
 using TaskStatus = CodingAgent.Services.Orchestration.Domain.Entities.TaskStatus;
 
@@ -31,7 +34,7 @@ public static class TaskEndpoints
         group.MapGet("", GetTasks)
             .WithName("GetTasks")
             .WithDescription(@"Retrieve tasks with pagination and optional filtering.
-                
+
 **Query Parameters:**
 - `status`: Filter by task status (Pending, Classifying, InProgress, Completed, Failed, Cancelled)
 - `type`: Filter by task type (BugFix, Feature, Refactor, Documentation, Test, Deployment)
@@ -50,7 +53,7 @@ public static class TaskEndpoints
         group.MapGet("{id:guid}", GetTask)
             .WithName("GetTask")
             .WithDescription(@"Retrieve a specific task by its unique identifier.
-                
+
 **Returns:**
 - Task details including all executions
 - 404 if task not found")
@@ -61,7 +64,7 @@ public static class TaskEndpoints
         group.MapPost("", CreateTask)
             .WithName("CreateTask")
             .WithDescription(@"Create a new coding task.
-                
+
 **Validation Rules:**
 - Title: 1-200 characters (required)
 - Description: 1-10,000 characters (required)
@@ -76,7 +79,7 @@ public static class TaskEndpoints
         group.MapPut("{id:guid}", UpdateTask)
             .WithName("UpdateTask")
             .WithDescription(@"Update an existing task's title and description.
-                
+
 **Validation Rules:**
 - Title: 1-200 characters (required)
 - Description: 1-10,000 characters (required)
@@ -94,7 +97,7 @@ public static class TaskEndpoints
         group.MapDelete("{id:guid}", DeleteTask)
             .WithName("DeleteTask")
             .WithDescription(@"Delete a task by its unique identifier.
-                
+
 **Restrictions:**
 - Cannot delete tasks that are currently in progress
 - Returns 400 if task is in InProgress status
@@ -108,7 +111,7 @@ public static class TaskEndpoints
         group.MapPost("{id:guid}/execute", ExecuteTask)
             .WithName("ExecuteTask")
             .WithDescription(@"Execute a task using the specified or auto-selected execution strategy.
-                
+
 **Strategy Selection:**
 - If not specified, strategy is automatically selected based on task complexity:
   - Simple → SingleShot
@@ -132,7 +135,7 @@ public static class TaskEndpoints
         group.MapGet("{id:guid}/executions", GetTaskExecutions)
             .WithName("GetTaskExecutions")
             .WithDescription(@"Get execution history for a specific task.
-                
+
 **Returns:**
 - List of all executions for the task
 - Empty list if no executions exist
@@ -280,10 +283,16 @@ public static class TaskEndpoints
             var dto = MapToTaskDto(task);
             return Results.Ok(dto);
         }
+        catch (NotFoundException ex)
+        {
+            logger.LogWarning(ex, "Task {TaskId} not found", id);
+            return Results.NotFound();
+        }
         catch (InvalidOperationException ex)
         {
-            logger.LogWarning(ex, "Failed to update task {TaskId}", id);
-            return Results.NotFound();
+            // Domain throws InvalidOperationException when updating while InProgress
+            logger.LogWarning(ex, "Cannot update task {TaskId}", id);
+            return Results.Problem(ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
     }
 
@@ -300,7 +309,7 @@ public static class TaskEndpoints
             await taskService.DeleteTaskAsync(id, ct);
             return Results.NoContent();
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        catch (NotFoundException ex)
         {
             logger.LogWarning(ex, "Task {TaskId} not found", id);
             return Results.NotFound();
@@ -403,28 +412,50 @@ public static class TaskEndpoints
 
     private static void AddPaginationLinks(HttpContext httpContext, PagedResult<CodingTask> pagedResult, int pageSize)
     {
-        var baseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}{httpContext.Request.Path}";
+        var request = httpContext.Request;
+        var baseUrl = $"{request.Scheme}://{request.Host}{request.Path}";
+
+        // Preserve existing query parameters (e.g., status, type) except page and pageSize
+        var preserved = new Dictionary<string, StringValues>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in request.Query)
+        {
+            if (!kvp.Key.Equals("page", StringComparison.OrdinalIgnoreCase)
+                && !kvp.Key.Equals("pageSize", StringComparison.OrdinalIgnoreCase))
+            {
+                preserved[kvp.Key] = kvp.Value;
+            }
+        }
+
+        string BuildLink(int targetPage, string rel)
+        {
+            var qs = QueryString.Create(preserved)
+                .Add("page", targetPage.ToString())
+                .Add("pageSize", pageSize.ToString());
+
+            return $"<{baseUrl}{qs.ToUriComponent()}>; rel=\"{rel}\"";
+        }
+
         var links = new List<string>
         {
-            $"<{baseUrl}?page=1&pageSize={pageSize}>; rel=\"first\""
+            BuildLink(1, "first")
         };
 
         if (pagedResult.TotalPages > 0)
         {
-            links.Add($"<{baseUrl}?page={pagedResult.TotalPages}&pageSize={pageSize}>; rel=\"last\"");
+            links.Add(BuildLink(pagedResult.TotalPages, "last"));
         }
 
         if (pagedResult.HasPreviousPage)
         {
-            links.Add($"<{baseUrl}?page={pagedResult.PageNumber - 1}&pageSize={pageSize}>; rel=\"prev\"");
+            links.Add(BuildLink(pagedResult.PageNumber - 1, "prev"));
         }
 
         if (pagedResult.HasNextPage)
         {
-            links.Add($"<{baseUrl}?page={pagedResult.PageNumber + 1}&pageSize={pageSize}>; rel=\"next\"");
+            links.Add(BuildLink(pagedResult.PageNumber + 1, "next"));
         }
 
-        if (links.Any())
+        if (links.Count > 0)
         {
             httpContext.Response.Headers["Link"] = string.Join(", ", links);
         }
