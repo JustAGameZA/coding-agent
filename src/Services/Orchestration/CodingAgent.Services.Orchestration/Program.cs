@@ -170,3 +170,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 await app.RunAsync();
+
+// Make Program accessible to tests
+public partial class Program
+{
+    // Prevent instantiation
+    protected Program() { }
+}
