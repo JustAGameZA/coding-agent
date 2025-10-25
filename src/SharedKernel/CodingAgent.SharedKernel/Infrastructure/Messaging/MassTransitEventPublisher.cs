@@ -12,9 +12,10 @@ namespace CodingAgent.SharedKernel.Infrastructure.Messaging;
 /// </summary>
 public class MassTransitEventPublisher : IEventPublisher
 {
+    private static readonly ActivitySource ActivitySource = new("CodingAgent.EventPublishing");
+    
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<MassTransitEventPublisher> _logger;
-    private readonly ActivitySource _activitySource;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MassTransitEventPublisher"/> class.
@@ -27,7 +28,6 @@ public class MassTransitEventPublisher : IEventPublisher
     {
         _publishEndpoint = publishEndpoint ?? throw new ArgumentNullException(nameof(publishEndpoint));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _activitySource = new ActivitySource("CodingAgent.EventPublishing");
     }
 
     /// <inheritdoc/>
@@ -39,7 +39,7 @@ public class MassTransitEventPublisher : IEventPublisher
             throw new ArgumentNullException(nameof(@event));
         }
 
-        using var activity = _activitySource.StartActivity("PublishEvent");
+        using var activity = ActivitySource.StartActivity("PublishEvent");
         activity?.SetTag("event.type", typeof(TEvent).Name);
         activity?.SetTag("event.id", @event.EventId);
 
@@ -88,7 +88,7 @@ public class MassTransitEventPublisher : IEventPublisher
             return;
         }
 
-        using var activity = _activitySource.StartActivity("PublishBatchEvents");
+        using var activity = ActivitySource.StartActivity("PublishBatchEvents");
         activity?.SetTag("event.type", typeof(TEvent).Name);
         activity?.SetTag("event.count", eventList.Count);
 

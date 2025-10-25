@@ -186,6 +186,7 @@ public class TaskService : ITaskService
             TaskComplexity.Simple => SharedKernelTaskComplexity.Simple,
             TaskComplexity.Medium => SharedKernelTaskComplexity.Medium,
             TaskComplexity.Complex => SharedKernelTaskComplexity.Complex,
+            TaskComplexity.Epic => SharedKernelTaskComplexity.Epic,
             _ => throw new ArgumentOutOfRangeException(nameof(complexity), complexity, "Unknown complexity")
         };
     }
