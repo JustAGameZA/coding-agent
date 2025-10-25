@@ -111,10 +111,25 @@ public class TaskService : ITaskService
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
             ?? throw new CodingAgent.SharedKernel.Exceptions.NotFoundException(EntityName, taskId);
 
-        task.Start();
-        await _taskRepository.UpdateAsync(task, cancellationToken);
+        // Only transition state for first execution
+        // Pending or Classifying → InProgress
+        // For re-execution of completed tasks, keep them in Completed state
+        if (task.Status == TaskStatus.Pending)
+        {
+            // Manual override case - task wasn't classified, go straight to InProgress
+            // Need to classify it first to satisfy state machine
+            task.Classify(task.Type, TaskComplexity.Medium); // Default to Medium
+            task.Start();
+            await _taskRepository.UpdateAsync(task, cancellationToken);
+        }
+        else if (task.Status == TaskStatus.Classifying)
+        {
+            task.Start();
+            await _taskRepository.UpdateAsync(task, cancellationToken);
+        }
+        // else: task is already InProgress, Completed, Failed, or Cancelled - don't change state
 
-        // Publish TaskStartedEvent with mapped values
+        // Publish TaskStartedEvent with mapped values (always publish for each execution)
         await _eventPublisher.PublishAsync(new TaskStartedEvent
         {
             TaskId = task.Id,
@@ -138,10 +153,15 @@ public class TaskService : ITaskService
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
             ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
 
-        task.Complete();
-        await _taskRepository.UpdateAsync(task, cancellationToken);
+        // Only transition state if currently InProgress (first execution completion)
+        // For re-executions, task stays in Completed state
+        if (task.Status == TaskStatus.InProgress)
+        {
+            task.Complete();
+            await _taskRepository.UpdateAsync(task, cancellationToken);
+        }
 
-        // Publish TaskCompletedEvent with mapped values
+        // Publish TaskCompletedEvent with mapped values (always publish for each execution)
         await _eventPublisher.PublishAsync(new TaskCompletedEvent
         {
             TaskId = task.Id,
@@ -170,10 +190,15 @@ public class TaskService : ITaskService
         var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
             ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
 
-        task.Fail(errorMessage);
-        await _taskRepository.UpdateAsync(task, cancellationToken);
+        // Only transition state if currently InProgress (first execution failure)
+        // For re-executions, task stays in its current state
+        if (task.Status == TaskStatus.InProgress)
+        {
+            task.Fail(errorMessage);
+            await _taskRepository.UpdateAsync(task, cancellationToken);
+        }
 
-        // Publish TaskFailedEvent with mapped values
+        // Publish TaskFailedEvent with mapped values (always publish for each execution)
         await _eventPublisher.PublishAsync(new TaskFailedEvent
         {
             TaskId = task.Id,

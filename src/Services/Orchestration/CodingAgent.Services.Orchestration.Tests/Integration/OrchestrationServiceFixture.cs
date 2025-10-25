@@ -45,14 +45,20 @@ public sealed class OrchestrationServiceFixture : IAsyncLifetime
 
                 builder.ConfigureAppConfiguration((ctx, config) =>
                 {
+                    // Reduce test server logging to minimize console I/O and keep VS Code responsive
+                    var settings = new Dictionary<string, string?>
+                    {
+                        ["Logging:LogLevel:Default"] = "Warning",
+                        ["Logging:LogLevel:Microsoft"] = "Warning",
+                        ["Logging:LogLevel:Microsoft.Hosting.Lifetime"] = "Warning"
+                    };
+
                     if (!string.IsNullOrEmpty(connectionString))
                     {
-                        var dict = new Dictionary<string, string?>
-                        {
-                            ["ConnectionStrings:OrchestrationDb"] = connectionString
-                        };
-                        config.AddInMemoryCollection(dict!);
+                        settings["ConnectionStrings:OrchestrationDb"] = connectionString;
                     }
+
+                    config.AddInMemoryCollection(settings!);
                 });
             });
 

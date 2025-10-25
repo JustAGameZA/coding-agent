@@ -5,6 +5,7 @@ using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Domain.Strategies;
 using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.Services.Orchestration.Infrastructure.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CodingAgent.Services.Orchestration.Domain.Services;
@@ -17,8 +18,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
 {
     private readonly IStrategySelector _strategySelector;
     private readonly IEnumerable<IExecutionStrategy> _strategies;
-    private readonly ITaskService _taskService;
-    private readonly IExecutionRepository _executionRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IExecutionLogService _logService;
     private readonly ILogger<ExecutionCoordinator> _logger;
     private readonly ActivitySource _activitySource;
@@ -26,16 +26,14 @@ public class ExecutionCoordinator : IExecutionCoordinator
     public ExecutionCoordinator(
         IStrategySelector strategySelector,
         IEnumerable<IExecutionStrategy> strategies,
-        ITaskService taskService,
-        IExecutionRepository executionRepository,
+        IServiceScopeFactory scopeFactory,
         IExecutionLogService logService,
         ILogger<ExecutionCoordinator> logger,
         ActivitySource activitySource)
     {
         _strategySelector = strategySelector ?? throw new ArgumentNullException(nameof(strategySelector));
         _strategies = strategies ?? throw new ArgumentNullException(nameof(strategies));
-        _taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
-        _executionRepository = executionRepository ?? throw new ArgumentNullException(nameof(executionRepository));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _logService = logService ?? throw new ArgumentNullException(nameof(logService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
@@ -46,43 +44,62 @@ public class ExecutionCoordinator : IExecutionCoordinator
         using var activity = _activitySource.StartActivity("QueueExecution");
         activity?.SetTag("task.id", task.Id);
 
+        // Create scope for database operations
+        using var scope = _scopeFactory.CreateScope();
+        var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
+        var executionRepository = scope.ServiceProvider.GetRequiredService<IExecutionRepository>();
+
         // Select strategy (with optional override)
         var strategy = await _strategySelector.SelectStrategyAsync(task, overrideStrategyName, cancellationToken);
 
         // Start task and publish TaskStartedEvent
-        await _taskService.StartTaskAsync(task.Id, MapStrategyName(strategy.Name), cancellationToken);
+        await taskService.StartTaskAsync(task.Id, MapStrategyName(strategy.Name), cancellationToken);
 
         // Create TaskExecution record (model used is mapped by strategy)
         var modelUsed = MapModelUsed(strategy.Name);
         var execution = new TaskExecution(task.Id, MapStrategyName(strategy.Name), modelUsed);
-        execution = await _executionRepository.AddAsync(execution, cancellationToken);
+        execution = await executionRepository.AddAsync(execution, cancellationToken);
 
-        // Background execution
-        _ = Task.Run(() => ExecuteInternalAsync(task, strategy, execution.Id, cancellationToken));
+        // Background execution - pass task ID and execution ID, not entities/repositories
+        _ = Task.Run(() => ExecuteInternalAsync(task.Id, strategy.Name, execution.Id, cancellationToken));
 
         return execution;
     }
 
-    private async Task ExecuteInternalAsync(CodingTask task, IExecutionStrategy strategy, Guid executionId, CancellationToken ct)
+    private async Task ExecuteInternalAsync(Guid taskId, string strategyName, Guid executionId, CancellationToken ct)
     {
         try
         {
-            await _logService.WriteAsync(executionId, $"status:starting strategy={strategy.Name}", ct);
+            await _logService.WriteAsync(executionId, $"status:starting strategy={strategyName}", ct);
+
+            // Create a new scope for this background task to get fresh DbContext
+            using var scope = _scopeFactory.CreateScope();
+            var taskRepository = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
+            var executionRepository = scope.ServiceProvider.GetRequiredService<IExecutionRepository>();
+            var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
+
+            // Load task from repository
+            var task = await taskRepository.GetByIdAsync(taskId, ct) 
+                ?? throw new InvalidOperationException($"Task {taskId} not found");
+
+            // Get strategy instance
+            var strategy = _strategies.FirstOrDefault(s => s.Name.Equals(strategyName, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Strategy {strategyName} not found");
 
             var context = new TaskExecutionContext();
             var sw = Stopwatch.StartNew();
             var result = await strategy.ExecuteAsync(task, context, ct);
             sw.Stop();
 
-            var execution = await _executionRepository.GetByIdAsync(executionId, ct) 
+            var execution = await executionRepository.GetByIdAsync(executionId, ct) 
                 ?? throw new InvalidOperationException("Execution not found");
 
             if (result.Success)
             {
                 execution.Complete(result.TotalTokensUsed, result.TotalCostUSD, result.Duration);
-                await _executionRepository.UpdateAsync(execution, ct);
+                await executionRepository.UpdateAsync(execution, ct);
 
-                await _taskService.CompleteTaskAsync(
+                await taskService.CompleteTaskAsync(
                     task.Id,
                     execution.Strategy,
                     result.TotalTokensUsed,
@@ -96,9 +113,9 @@ public class ExecutionCoordinator : IExecutionCoordinator
             {
                 var error = result.Errors.FirstOrDefault() ?? "Unknown error";
                 execution.Fail(error);
-                await _executionRepository.UpdateAsync(execution, ct);
+                await executionRepository.UpdateAsync(execution, ct);
 
-                await _taskService.FailTaskAsync(
+                await taskService.FailTaskAsync(
                     task.Id,
                     execution.Strategy,
                     error,
@@ -112,7 +129,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Execution failed with exception for task {TaskId}", task.Id);
+            _logger.LogError(ex, "Execution failed with exception for task {TaskId}", taskId);
             // Best-effort logging
             try { await _logService.WriteAsync(executionId, $"status:failed error={Escape(ex.Message)}", ct); } catch {}
         }

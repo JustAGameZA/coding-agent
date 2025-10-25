@@ -116,8 +116,11 @@ public class StrategySelector : IStrategySelector
                     complexity,
                     classificationResponse.Confidence);
 
-                // Update task with classification results
-                task.Classify(task.Type, complexity);
+                // Update task with classification results only if not already started/completed
+                if (task.Status == Domain.Entities.TaskStatus.Pending || task.Status == Domain.Entities.TaskStatus.Classifying)
+                {
+                    task.Classify(task.Type, complexity);
+                }
             }
             catch (Exception ex)
             {
@@ -139,8 +142,11 @@ public class StrategySelector : IStrategySelector
                     task.Id,
                     complexity);
 
-                // Update task with heuristic classification
-                task.Classify(task.Type, complexity);
+                // Update task with heuristic classification only if not already started/completed
+                if (task.Status == Domain.Entities.TaskStatus.Pending || task.Status == Domain.Entities.TaskStatus.Classifying)
+                {
+                    task.Classify(task.Type, complexity);
+                }
             }
 
             // Map complexity to strategy
