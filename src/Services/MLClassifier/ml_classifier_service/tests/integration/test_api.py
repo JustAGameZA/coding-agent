@@ -137,3 +137,98 @@ class TestClassificationAPI:
         assert isinstance(data["reasoning"], str)
         assert isinstance(data["suggested_strategy"], str)
         assert isinstance(data["estimated_tokens"], int)
+
+    def test_get_metrics(self, client):
+        """Test getting classification metrics."""
+        # First, do some classifications to generate metrics
+        client.post(
+            "/classify/", json={"task_description": "Fix the authentication bug"}
+        )
+        client.post(
+            "/classify/", json={"task_description": "Add new user dashboard feature"}
+        )
+
+        # Get metrics
+        response = client.get("/classify/metrics")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify metrics structure
+        assert "total_classifications" in data
+        assert "heuristic_used" in data
+        assert "ml_used" in data
+        assert "llm_used" in data
+        assert "heuristic_percent" in data
+        assert "ml_percent" in data
+        assert "llm_percent" in data
+        assert "average_latency_ms" in data
+        assert "circuit_breaker_trips" in data
+        assert "timeouts" in data
+
+        # Should have at least 2 classifications from above
+        assert data["total_classifications"] >= 2
+
+    def test_reset_metrics(self, client):
+        """Test resetting classification metrics."""
+        # Generate some metrics
+        client.post("/classify/", json={"task_description": "Fix bug"})
+
+        # Verify metrics exist
+        metrics_before = client.get("/classify/metrics").json()
+        assert metrics_before["total_classifications"] > 0
+
+        # Reset metrics
+        response = client.post("/classify/metrics/reset")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+
+        # Verify metrics are reset
+        metrics_after = client.get("/classify/metrics").json()
+        assert metrics_after["total_classifications"] == 0
+        assert metrics_after["heuristic_used"] == 0
+        assert metrics_after["ml_used"] == 0
+        assert metrics_after["llm_used"] == 0
+
+    def test_reset_circuit_breaker(self, client):
+        """Test manually resetting the circuit breaker."""
+        response = client.post("/classify/circuit-breaker/reset")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        assert "success" in data["message"].lower()
+
+    def test_metrics_track_classifier_usage(self, client):
+        """Test that metrics correctly track which classifier was used."""
+        # Reset metrics first
+        client.post("/classify/metrics/reset")
+
+        # High confidence heuristic - should use heuristic
+        client.post(
+            "/classify/",
+            json={"task_description": "Fix the critical authentication bug error"},
+        )
+
+        metrics = client.get("/classify/metrics").json()
+        assert metrics["heuristic_used"] == 1
+        assert metrics["heuristic_percent"] == 100.0
+
+    def test_batch_classification_updates_metrics(self, client):
+        """Test that batch classification updates metrics correctly."""
+        # Reset metrics
+        client.post("/classify/metrics/reset")
+
+        # Batch classify
+        requests = [
+            {"task_description": "Fix bug"},
+            {"task_description": "Add feature"},
+            {"task_description": "Write tests"},
+        ]
+        client.post("/classify/batch", json=requests)
+
+        # Check metrics
+        metrics = client.get("/classify/metrics").json()
+        assert metrics["total_classifications"] == 3
