@@ -54,7 +54,7 @@ public class SingleShotStrategyIntegrationTests
     public User GetUser(int id)
     {
         var user = _repository.FindById(id);
-        return user.Name; // Potential null reference
+        return user; // Potential null reference
     }
 }",
                     "csharp")
