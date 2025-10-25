@@ -41,11 +41,28 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 // Register event publisher
 builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
 
+// Service metadata for telemetry
+var serviceName = "CodingAgent.Services.Orchestration";
+var serviceVersion = "2.0.0";
+
 // Register execution strategies and dependencies
 // TODO: Replace mock implementations with real LLM and validator implementations in future phases
 builder.Services.AddScoped<ILlmClient, MockLlmClient>();
 builder.Services.AddScoped<ICodeValidator, MockCodeValidator>();
+
+// Register ActivitySource for distributed tracing
+builder.Services.AddSingleton(_ => new System.Diagnostics.ActivitySource(serviceName));
+
+// Register agents for MultiAgent strategy
+builder.Services.AddScoped<IPlannerAgent, PlannerAgent>();
+builder.Services.AddScoped<ICoderAgent, CoderAgent>();
+builder.Services.AddScoped<IReviewerAgent, ReviewerAgent>();
+builder.Services.AddScoped<ITesterAgent, TesterAgent>();
+
+// Register execution strategies
+builder.Services.AddScoped<IExecutionStrategy, SingleShotStrategy>();
 builder.Services.AddScoped<IExecutionStrategy, IterativeStrategy>();
+builder.Services.AddScoped<IExecutionStrategy, MultiAgentStrategy>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()
@@ -66,9 +83,6 @@ if (builder.Environment.IsProduction())
 }
 
 // OpenTelemetry configuration
-var serviceName = "CodingAgent.Services.Orchestration";
-var serviceVersion = "2.0.0";
-
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
         .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
