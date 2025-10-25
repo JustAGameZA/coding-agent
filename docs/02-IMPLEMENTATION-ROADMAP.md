@@ -31,6 +31,12 @@
 - ✅ Iterative strategy implemented (#88)
 - ✅ Unit test suite updated and green across solution; Orchestration integration tests intentionally skipped (manual, require API keys)
 
+**Phase 2 Orchestration Strategies — Update (2025-10-25)**
+- ✅ PR #121: MultiAgentStrategy implemented for complex tasks with Planner/Coder/Reviewer/Tester agents
+- ✅ Addressed review feedback: fixed duplicate coder aggregation, precompiled regex patterns, applied conflict resolution for test files
+- ✅ All Orchestration unit tests green (161 tests)
+- 🔜 Add strategy selector to route by complexity (Simple → SingleShot, Medium → Iterative, Complex → MultiAgent)
+
 Next up (priority): Phase 2 Orchestration Batch 2 — API & Integration
 - Implement task CRUD endpoints and SSE logs streaming
 - Integrate ML Classifier (classification) and GitHub Service (PR creation)
@@ -256,9 +262,9 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 **Days 4-6: Execution Strategies**
 - ✅ Implement `SingleShotStrategy` (simple tasks) — #95 (PR #117 merged)
 - ✅ Implement `IterativeStrategy` (medium tasks) — #88
-- [ ] Implement `MultiAgentStrategy` (complex tasks)
+- ✅ Implement `MultiAgentStrategy` (complex tasks) — **PR #121 merged 2025-10-25**
 - [ ] Add strategy selector (based on complexity)
-- **Deliverable**: ▶ Partially complete — SingleShot + Iterative done; MultiAgent and selector pending
+- **Deliverable**: ▶ Strategies implemented (SingleShot, Iterative, MultiAgent); selector pending
 
 **Days 7-9: REST API & Integration**
 - [ ] Implement task CRUD endpoints
@@ -606,7 +612,7 @@ Fix bugs, optimize performance, complete documentation.
 
 ## Next Steps
 
-1. Orchestration (Batch 2): Implement task CRUD + SSE logs, integrate ML Classifier and GitHub Service, and validate event publishing end-to-end.
+1. Orchestration (Batch 2): Add strategy selector (complexity-based routing), implement task CRUD + SSE logs, integrate ML Classifier and GitHub Service, and validate event publishing end-to-end.
 2. Chat: Add SignalR hub authentication + presence tracking, implement file attachments (multipart + storage).
 3. ML Classifier: Scaffold FastAPI service and implement heuristic classifier; prepare ML/XGBoost stage and training hooks.
 4. Testing/CI: Add Testcontainers-based integration tests for Orchestration; enforce coverage thresholds in CI.
