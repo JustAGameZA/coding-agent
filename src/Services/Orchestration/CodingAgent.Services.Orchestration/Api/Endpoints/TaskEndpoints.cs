@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Primitives;
 using FluentValidation;
 using TaskStatus = CodingAgent.Services.Orchestration.Domain.Entities.TaskStatus;
+using CodingAgent.Services.Orchestration.Infrastructure.Logging;
 
 namespace CodingAgent.Services.Orchestration.Api.Endpoints;
 
@@ -142,6 +143,21 @@ public static class TaskEndpoints
 - Includes execution status, strategy used, tokens, cost, and errors")
             .WithSummary("List task executions")
             .Produces<List<ExecutionDto>>(StatusCodes.Status200OK, "application/json")
+            .Produces(StatusCodes.Status404NotFound);
+
+        // SSE logs endpoint for real-time execution logs
+        group.MapGet("{id:guid}/logs", StreamTaskLogs)
+            .WithName("StreamTaskLogs")
+            .WithDescription(@"Stream server-sent events (SSE) for a task's latest or specific execution.
+
+Query Parameters:
+- executionId (optional): When provided, streams logs for that execution; otherwise streams the latest execution.
+
+Response:
+- text/event-stream with `data: <message>` lines and occasional keepalive pings
+")
+            .WithSummary("Stream task logs (SSE)")
+            .Produces(StatusCodes.Status200OK, contentType: "text/event-stream")
             .Produces(StatusCodes.Status404NotFound);
 
         // Ping endpoint for health verification
@@ -326,6 +342,7 @@ public static class TaskEndpoints
         ExecuteTaskRequest request,
         IValidator<ExecuteTaskRequest> validator,
         ITaskRepository repository,
+        IExecutionCoordinator coordinator,
         ILogger<Program> logger,
         CancellationToken ct)
     {
@@ -342,18 +359,16 @@ public static class TaskEndpoints
         {
             return Results.NotFound();
         }
-
-        // TODO: Implement actual execution logic in future phases
-        // For now, return a 202 Accepted with execution details
-        var executionId = Guid.NewGuid();
-        var strategy = request.Strategy ?? SelectStrategyForComplexity(task.Complexity);
+        // Kick off background execution via coordinator
+        var overrideStrategyName = request.Strategy?.ToString();
+        var execution = await coordinator.QueueExecutionAsync(task, overrideStrategyName, ct);
 
         var response = new ExecuteTaskResponse
         {
             TaskId = id,
-            ExecutionId = executionId,
-            Strategy = strategy,
-            Message = "Task execution queued. Use GET /tasks/{id}/executions to monitor progress."
+            ExecutionId = execution.Id,
+            Strategy = execution.Strategy,
+            Message = "Task execution queued. Use GET /tasks/{id}/executions or /tasks/{id}/logs to monitor progress."
         };
 
         return Results.AcceptedAtRoute(
@@ -471,5 +486,36 @@ public static class TaskEndpoints
             TaskComplexity.Epic => ExecutionStrategy.HybridExecution,
             _ => ExecutionStrategy.Iterative
         };
+    }
+
+    private static async Task<IResult> StreamTaskLogs(
+        Guid id,
+        HttpContext httpContext,
+        IExecutionRepository executionRepository,
+        IExecutionLogService logService,
+        ILogger<Program> logger,
+        Guid? executionId,
+        CancellationToken ct)
+    {
+        // Find the execution to stream
+        Guid executionToStream = executionId ??
+            (await executionRepository.GetLatestByTaskIdAsync(id, ct))?.Id ?? Guid.Empty;
+
+        if (executionToStream == Guid.Empty)
+        {
+            return Results.NotFound();
+        }
+
+        httpContext.Response.Headers["Cache-Control"] = "no-cache";
+        httpContext.Response.Headers["Content-Type"] = "text/event-stream";
+        httpContext.Response.Headers["X-Accel-Buffering"] = "no"; // Nginx buffering off
+
+        await foreach (var line in logService.ReadStreamAsync(executionToStream, ct))
+        {
+            await httpContext.Response.WriteAsync($"data: {line}\n\n", ct);
+            await httpContext.Response.Body.FlushAsync(ct);
+        }
+
+        return Results.Ok();
     }
 }

@@ -4,6 +4,7 @@ using CodingAgent.Services.Orchestration.Domain.Services;
 using CodingAgent.Services.Orchestration.Domain.Strategies;
 using CodingAgent.Services.Orchestration.Infrastructure.ExternalServices;
 using CodingAgent.Services.Orchestration.Infrastructure.LLM;
+using CodingAgent.Services.Orchestration.Infrastructure.Logging;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
 using CodingAgent.SharedKernel.Abstractions;
@@ -42,6 +43,8 @@ builder.Services.AddScoped<IExecutionRepository, ExecutionRepository>();
 
 // Register domain services
 builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<IExecutionCoordinator, ExecutionCoordinator>();
+builder.Services.AddSingleton<IExecutionLogService, ExecutionLogService>();
 
 // Register validators
 builder.Services.AddScoped<IValidator<CreateTaskRequest>, CreateTaskRequestValidator>();
