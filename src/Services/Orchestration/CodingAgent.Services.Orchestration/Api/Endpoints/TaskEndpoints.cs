@@ -21,58 +21,121 @@ public static class TaskEndpoints
     {
         var group = app.MapGroup("/tasks")
             .WithTags("Tasks")
-            .WithOpenApi();
+            .WithOpenApi()
+            .WithDescription("Endpoints for managing coding tasks and their execution");
 
         // CRUD Endpoints
         group.MapGet("", GetTasks)
             .WithName("GetTasks")
-            .WithDescription("Retrieve tasks with pagination and optional filtering by status and type")
+            .WithDescription(@"Retrieve tasks with pagination and optional filtering.
+                
+**Query Parameters:**
+- `status`: Filter by task status (Pending, Classifying, InProgress, Completed, Failed, Cancelled)
+- `type`: Filter by task type (BugFix, Feature, Refactor, Documentation, Test, Deployment)
+- `page`: Page number (default: 1, min: 1)
+- `pageSize`: Items per page (default: 50, max: 100)
+
+**Response Headers:**
+- `X-Total-Count`: Total number of items
+- `X-Page-Number`: Current page number
+- `X-Page-Size`: Items per page
+- `X-Total-Pages`: Total number of pages
+- `Link`: HATEOAS pagination links")
             .WithSummary("List tasks with pagination and filtering")
-            .Produces<List<TaskDto>>();
+            .Produces<List<TaskDto>>(StatusCodes.Status200OK, "application/json");
 
         group.MapGet("{id:guid}", GetTask)
             .WithName("GetTask")
-            .WithDescription("Retrieve a specific task by its unique identifier with execution history")
+            .WithDescription(@"Retrieve a specific task by its unique identifier.
+                
+**Returns:**
+- Task details including all executions
+- 404 if task not found")
             .WithSummary("Get task by ID")
-            .Produces<TaskDetailDto>()
+            .Produces<TaskDetailDto>(StatusCodes.Status200OK, "application/json")
             .Produces(StatusCodes.Status404NotFound);
 
         group.MapPost("", CreateTask)
             .WithName("CreateTask")
-            .WithDescription("Create a new coding task. Title must be 1-200 characters, description 1-10,000 characters.")
+            .WithDescription(@"Create a new coding task.
+                
+**Validation Rules:**
+- Title: 1-200 characters (required)
+- Description: 1-10,000 characters (required)
+
+**Response:**
+- 201 Created with Location header pointing to the new task
+- Task is created in 'Pending' status")
             .WithSummary("Create a new task")
-            .Produces<TaskDto>(StatusCodes.Status201Created)
-            .ProducesValidationProblem();
+            .Produces<TaskDto>(StatusCodes.Status201Created, "application/json")
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest);
 
         group.MapPut("{id:guid}", UpdateTask)
             .WithName("UpdateTask")
-            .WithDescription("Update an existing task's title and description. Cannot update tasks in progress.")
+            .WithDescription(@"Update an existing task's title and description.
+                
+**Validation Rules:**
+- Title: 1-200 characters (required)
+- Description: 1-10,000 characters (required)
+
+**Restrictions:**
+- Cannot update tasks that are currently in progress
+- Returns 400 if task is in InProgress status
+- Returns 404 if task not found")
             .WithSummary("Update task details")
-            .Produces<TaskDto>(StatusCodes.Status200OK)
+            .Produces<TaskDto>(StatusCodes.Status200OK, "application/json")
             .Produces(StatusCodes.Status404NotFound)
-            .ProducesValidationProblem();
+            .Produces(StatusCodes.Status400BadRequest)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest);
 
         group.MapDelete("{id:guid}", DeleteTask)
             .WithName("DeleteTask")
-            .WithDescription("Delete a task by its unique identifier. Cannot delete tasks in progress.")
+            .WithDescription(@"Delete a task by its unique identifier.
+                
+**Restrictions:**
+- Cannot delete tasks that are currently in progress
+- Returns 400 if task is in InProgress status
+- Returns 404 if task not found")
             .WithSummary("Delete task")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status400BadRequest);
 
         // Execution Endpoints
         group.MapPost("{id:guid}/execute", ExecuteTask)
             .WithName("ExecuteTask")
-            .WithDescription("Execute a task using the specified or auto-selected execution strategy")
+            .WithDescription(@"Execute a task using the specified or auto-selected execution strategy.
+                
+**Strategy Selection:**
+- If not specified, strategy is automatically selected based on task complexity:
+  - Simple → SingleShot
+  - Medium → Iterative
+  - Complex → MultiAgent
+  - Epic → HybridExecution
+
+**Rate Limiting:**
+- Maximum 10 executions per hour per user
+- Returns 429 Too Many Requests if limit exceeded
+
+**Response:**
+- 202 Accepted with Location header pointing to executions endpoint
+- Execution is queued and will be processed asynchronously")
             .WithSummary("Execute task")
-            .Produces<ExecuteTaskResponse>(StatusCodes.Status202Accepted)
+            .Produces<ExecuteTaskResponse>(StatusCodes.Status202Accepted, "application/json")
             .Produces(StatusCodes.Status404NotFound)
-            .ProducesValidationProblem();
+            .Produces(StatusCodes.Status429TooManyRequests)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest);
 
         group.MapGet("{id:guid}/executions", GetTaskExecutions)
             .WithName("GetTaskExecutions")
-            .WithDescription("Get execution history for a specific task")
+            .WithDescription(@"Get execution history for a specific task.
+                
+**Returns:**
+- List of all executions for the task
+- Empty list if no executions exist
+- Includes execution status, strategy used, tokens, cost, and errors")
             .WithSummary("List task executions")
-            .Produces<List<ExecutionDto>>()
+            .Produces<List<ExecutionDto>>(StatusCodes.Status200OK, "application/json")
             .Produces(StatusCodes.Status404NotFound);
 
         // Ping endpoint for health verification

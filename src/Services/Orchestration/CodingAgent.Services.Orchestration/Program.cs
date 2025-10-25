@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +44,42 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IValidator<CreateTaskRequest>, CreateTaskRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateTaskRequest>, UpdateTaskRequestValidator>();
 builder.Services.AddScoped<IValidator<ExecuteTaskRequest>, ExecuteTaskRequestValidator>();
+
+// Configure rate limiting - 10 executions per hour per user
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        // Get user ID from context (for now using a default, will be replaced with actual auth)
+        var userId = context.Request.Headers["X-User-Id"].FirstOrDefault() 
+            ?? "00000000-0000-0000-0000-000000000001";
+
+        // Only apply rate limiting to execution endpoints
+        if (context.Request.Path.StartsWithSegments("/tasks") && 
+            context.Request.Path.Value?.Contains("/execute") == true)
+        {
+            return RateLimitPartition.GetFixedWindowLimiter(userId, _ =>
+                new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromHours(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0 // No queueing
+                });
+        }
+
+        // No rate limit for other endpoints
+        return RateLimitPartition.GetNoLimiter<string>(string.Empty);
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsync(
+            "Rate limit exceeded. Maximum 10 task executions per hour allowed.", 
+            cancellationToken: token);
+    };
+});
 
 // Register event publisher
 builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
@@ -143,6 +180,9 @@ if (app.Environment.IsDevelopment())
         config.DocumentPath = "/swagger/{documentName}/swagger.json";
     });
 }
+
+// Enable rate limiting
+app.UseRateLimiter();
 
 // Map endpoints
 app.MapHealthChecks("/health");
