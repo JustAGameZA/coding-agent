@@ -4,7 +4,9 @@ import logging
 
 from api.schemas.classification import ClassificationRequest, ClassificationResult
 from domain.classifiers.hybrid import HybridClassifier
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +16,15 @@ router = APIRouter(prefix="/classify", tags=["Classification"])
 # This uses heuristic -> ML -> LLM cascade with circuit breaker
 hybrid_classifier = HybridClassifier()
 
+# Initialize limiter for this router
+limiter = Limiter(key_func=get_remote_address)
+
 
 @router.post("/", response_model=ClassificationResult)
-async def classify_task(request: ClassificationRequest) -> ClassificationResult:
+@limiter.limit("100/minute")
+async def classify_task(
+    request: Request, classification_request: ClassificationRequest
+) -> ClassificationResult:
     """
     Classify a coding task using hybrid approach.
 
@@ -37,10 +45,10 @@ async def classify_task(request: ClassificationRequest) -> ClassificationResult:
         HTTPException: If classification fails
     """
     try:
-        logger.info(f"Classifying task: {request.task_description[:50]}...")
+        logger.info(f"Classifying task: {classification_request.task_description[:50]}...")
 
         # Use hybrid classifier (heuristic -> ML -> LLM cascade)
-        result = await hybrid_classifier.classify(request)
+        result = await hybrid_classifier.classify(classification_request)
 
         logger.info(
             f"Classification complete: type={result.task_type.value}, "
@@ -59,8 +67,9 @@ async def classify_task(request: ClassificationRequest) -> ClassificationResult:
 
 
 @router.post("/batch", response_model=list[ClassificationResult])
+@limiter.limit("100/minute")
 async def classify_tasks_batch(
-    requests: list[ClassificationRequest],
+    request: Request, requests: list[ClassificationRequest]
 ) -> list[ClassificationResult]:
     """
     Classify multiple tasks in batch using hybrid approach.
@@ -78,8 +87,8 @@ async def classify_tasks_batch(
         logger.info(f"Batch classifying {len(requests)} tasks...")
 
         results = []
-        for request in requests:
-            result = await hybrid_classifier.classify(request)
+        for req in requests:
+            result = await hybrid_classifier.classify(req)
             results.append(result)
 
         logger.info(f"Batch classification complete: {len(results)} tasks processed")

@@ -10,7 +10,7 @@ class ClassificationRequest(BaseModel):
     """Request model for task classification."""
 
     task_description: str = Field(
-        ..., min_length=1, description="Description of the coding task"
+        ..., min_length=10, max_length=10000, description="Description of the coding task"
     )
     context: Optional[dict[str, str]] = Field(
         None, description="Additional context for classification"

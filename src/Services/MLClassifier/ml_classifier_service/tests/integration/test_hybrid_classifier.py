@@ -384,13 +384,13 @@ class TestHybridClassifierPerformance:
         """Test that average latency is tracked correctly."""
         requests = [
             ClassificationRequest(
-                task_description="Fix bug"
+                task_description="Fix bug in the authentication system"
             ),  # High confidence heuristic
             ClassificationRequest(
-                task_description="Implement feature"
+                task_description="Implement feature for user profiles"
             ),  # High confidence heuristic
             ClassificationRequest(
-                task_description="Update module"
+                task_description="Update module with new configuration"
             ),  # Lower confidence
         ]
 
@@ -432,7 +432,7 @@ class TestHybridClassifierMetricsOperations:
         """Test that metrics accumulate over multiple calls."""
         for i in range(10):
             request = ClassificationRequest(
-                task_description=f"Fix bug number {i}"
+                task_description=f"Fix bug number {i} in the authentication system"
             )
             await hybrid_classifier.classify(request)
 
