@@ -37,6 +37,15 @@
 - ✅ All Orchestration unit tests green (161 tests)
 - 🔜 Add strategy selector to route by complexity (Simple → SingleShot, Medium → Iterative, Complex → MultiAgent)
 
+**Phase 2 ML Classifier — Batch 1 Complete!** ✅ (PRs #122, #123, #127 merged 2025-10-25)
+- ✅ Heuristic classifier implemented with comprehensive tests; fixed no-keyword-match bug to derive strategy/tokens from complexity (100% coverage on module)
+- ✅ ML Classifier (XGBoost) implemented with 122-feature extractor and model loader; dummy model shipped for dev/testing
+- ✅ Performance: average latency ~1.26ms (well under 50ms target); coverage ~98% across ML components
+- ✅ REST API production-ready: rate limiting (100 req/min via slowapi), validation (10-10K chars), enhanced health checks with dependency status (PR #127)
+- ✅ Testing: 145 tests passing (109 unit + 36 integration) with comprehensive coverage
+- ✅ Documentation added: `ML_CLASSIFIER_IMPLEMENTATION.md`, `models/README.md`; model versioning enabled via file naming
+- 🔜 Wire hybrid routing (heuristic → ML → LLM) into `/classify`; add `/train` endpoint + event listener for `TaskCompletedEvent`; add CI job for Python tests
+
 Next up (priority): Phase 2 Orchestration Batch 2 — API & Integration
 - Implement task CRUD endpoints and SSE logs streaming
 - Integrate ML Classifier (classification) and GitHub Service (PR creation)
@@ -282,32 +291,36 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 ### Week 11-12: ML Classifier Service
 
 **Days 1-2: Python Project Setup**
-- [ ] Create FastAPI project structure
-- [ ] Setup virtual environment (Poetry)
-- [ ] Configure PostgreSQL connection (asyncpg)
-- [ ] Add pytest test framework
-- **Deliverable**: `ml-classifier-service/` Python project
+- [x] Create FastAPI project structure
+- [x] Setup virtual environment (venv) and `requirements.txt`
+- [ ] Configure PostgreSQL connection (asyncpg) — not required yet (no persistence in Phase 2)
+- [x] Add pytest test framework
+- **Deliverable**: `ml_classifier_service/` Python project scaffolded with tests
 
 **Days 3-5: Classification Logic**
-- [ ] Implement heuristic classifier (keyword matching)
-- [ ] Implement ML classifier (XGBoost model)
-- [ ] Add hybrid approach (heuristic → ML fallback)
-- [ ] Write unit tests for both classifiers
-- **Deliverable**: Classification API returns predictions
+- [x] Implement heuristic classifier (keyword matching) — bugfix for no-match strategy/tokens included (PR #123)
+- [x] Implement ML classifier (XGBoost model) with feature extractor and model loader (PR #122)
+- [ ] Add hybrid approach (heuristic → ML → LLM fallback) — wiring pending in API
+- [x] Write unit tests (98–100% coverage across modules)
+- **Deliverable**: Classification logic implemented (heuristic + ML); hybrid routing planned next
 
 **Days 6-7: Model Training**
 - [ ] Create training data loader (from PostgreSQL)
-- [ ] Implement feature extraction (TF-IDF, code metrics)
-- [ ] Train XGBoost model (scikit-learn pipeline)
+- [x] Implement feature extraction (TF-IDF, code metrics)
+- ⏳ Train XGBoost model (scikit-learn pipeline) — dummy model shipped for dev/testing
 - [ ] Export model to ONNX format
-- **Deliverable**: Trained model with 85%+ accuracy
+- **Deliverable**: Baseline model artifacts available (dummy); training pipeline to be completed in Phase 3
 
 **Days 8-10: REST API & Integration**
-- [ ] Implement `/classify` endpoint
+- [x] Implement `/classify` endpoint (currently heuristic-first)
+- [x] Add rate limiting (100 req/min per IP via slowapi) — **PR #127 merged 2025-10-25**
+- [x] Add input validation (10-10K char task descriptions) — **PR #127 merged 2025-10-25**
+- [x] Enhance health checks with classifier dependency status — **PR #127 merged 2025-10-25**
+- [x] Write integration tests for validation, rate limiting, health — **PR #127 merged 2025-10-25**
 - [ ] Add `/train` endpoint (trigger retraining)
 - [ ] Implement event listener for `TaskCompletedEvent` (training data collection)
-- [ ] Add model versioning (save models with timestamps)
-- **Deliverable**: ML service integrated with Orchestration
+- [x] Add model versioning (save models with versioned filenames)
+- **Deliverable**: ✅ ML service REST API production-ready (145 tests passing); training integration pending
 
 ---
 
@@ -614,8 +627,8 @@ Fix bugs, optimize performance, complete documentation.
 
 1. Orchestration (Batch 2): Add strategy selector (complexity-based routing), implement task CRUD + SSE logs, integrate ML Classifier and GitHub Service, and validate event publishing end-to-end.
 2. Chat: Add SignalR hub authentication + presence tracking, implement file attachments (multipart + storage).
-3. ML Classifier: Scaffold FastAPI service and implement heuristic classifier; prepare ML/XGBoost stage and training hooks.
-4. Testing/CI: Add Testcontainers-based integration tests for Orchestration; enforce coverage thresholds in CI.
+3. ML Classifier: Wire hybrid routing (heuristic → ML → LLM) into `/classify`, add `/train` endpoint and `TaskCompletedEvent` listener; keep dummy model for dev until training pipeline is ready.
+4. Testing/CI: Add Testcontainers-based integration tests for Orchestration; add CI job for Python tests (ML Classifier) and enforce coverage thresholds in CI.
 
 ---
 

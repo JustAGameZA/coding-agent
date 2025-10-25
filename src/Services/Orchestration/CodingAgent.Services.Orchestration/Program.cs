@@ -2,6 +2,7 @@ using CodingAgent.Services.Orchestration.Api.Endpoints;
 using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Domain.Services;
 using CodingAgent.Services.Orchestration.Domain.Strategies;
+using CodingAgent.Services.Orchestration.Infrastructure.ExternalServices;
 using CodingAgent.Services.Orchestration.Infrastructure.LLM;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
@@ -15,6 +16,8 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Threading.RateLimiting;
+using Polly;
+using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,11 +57,11 @@ builder.Services.AddRateLimiter(options =>
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
         // Get user ID from context (for now using a default, will be replaced with actual auth)
-        var userId = context.Request.Headers["X-User-Id"].FirstOrDefault() 
+        var userId = context.Request.Headers["X-User-Id"].FirstOrDefault()
             ?? DefaultUserId;
 
         // Only apply rate limiting to execution endpoints
-        if (context.Request.Path.StartsWithSegments("/tasks") && 
+        if (context.Request.Path.StartsWithSegments("/tasks") &&
             context.Request.Path.Value?.Contains("/execute") == true)
         {
             return RateLimitPartition.GetFixedWindowLimiter(userId, _ =>
@@ -79,7 +82,7 @@ builder.Services.AddRateLimiter(options =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         await context.HttpContext.Response.WriteAsync(
-            "Rate limit exceeded. Maximum 10 task executions per hour allowed.", 
+            "Rate limit exceeded. Maximum 10 task executions per hour allowed.",
             cancellationToken: token);
     };
 });
@@ -109,6 +112,19 @@ builder.Services.AddScoped<ITesterAgent, TesterAgent>();
 builder.Services.AddScoped<IExecutionStrategy, SingleShotStrategy>();
 builder.Services.AddScoped<IExecutionStrategy, IterativeStrategy>();
 builder.Services.AddScoped<IExecutionStrategy, MultiAgentStrategy>();
+
+// Register ML Classifier HTTP client with retry policy
+builder.Services.AddHttpClient<IMLClassifierClient, MLClassifierClient>(client =>
+{
+    var mlClassifierBaseUrl = builder.Configuration["MLClassifier:BaseUrl"] ?? "http://localhost:8000";
+    client.BaseAddress = new Uri(mlClassifierBaseUrl);
+    client.Timeout = TimeSpan.FromMilliseconds(100); // 100ms timeout for fast failure
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+// Register Strategy Selector
+builder.Services.AddScoped<IStrategySelector, StrategySelector>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()
@@ -214,9 +230,28 @@ using (var scope = app.Services.CreateScope())
 
 await app.RunAsync();
 
-// Make Program accessible to tests
+// Make Program accessible to tests and host Polly policy helpers
 public partial class Program
 {
     // Prevent instantiation
     protected Program() { }
+
+    // Polly policies for ML Classifier HTTP client
+    internal static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .WaitAndRetryAsync(
+                retryCount: 2,
+                sleepDurationProvider: _ => TimeSpan.FromMilliseconds(50));
+    }
+
+    internal static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .CircuitBreakerAsync(
+                handledEventsAllowedBeforeBreaking: 3,
+                durationOfBreak: TimeSpan.FromSeconds(30));
+    }
 }
