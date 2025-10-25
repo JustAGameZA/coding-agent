@@ -8,7 +8,10 @@ namespace CodingAgent.Services.Orchestration.Domain.Services;
 public interface ICodeValidator
 {
     /// <summary>
-    /// Validates the provided code changes (syntax, compilation).
+    /// Validates code changes for syntax and basic correctness.
     /// </summary>
+    /// <param name="changes">The code changes to validate</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Validation result with success status and any errors</returns>
     Task<ValidationResult> ValidateAsync(List<CodeChange> changes, CancellationToken cancellationToken = default);
 }

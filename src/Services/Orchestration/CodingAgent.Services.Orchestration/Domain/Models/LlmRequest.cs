@@ -12,6 +12,17 @@ public class LlmRequest
 }
 
 /// <summary>
+/// Response from LLM generation.
+/// </summary>
+public class LlmResponse
+{
+    public required string Content { get; init; }
+    public int TokensUsed { get; init; }
+    public decimal Cost { get; init; }
+    public string? Model { get; init; }
+}
+
+/// <summary>
 /// Represents a message in the conversation with the LLM.
 /// </summary>
 public class LlmMessage

@@ -116,7 +116,7 @@ public class IterativeStrategyTests
 public class Test { }
 ```",
             TokensUsed = 150,
-            CostUSD = 0.003m
+            Cost = 0.003m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -157,7 +157,7 @@ public class Test { }
 public class Test { // Missing closing brace
 ```",
             TokensUsed = 100,
-            CostUSD = 0.002m
+            Cost = 0.002m
         };
 
         var llmResponse2 = new LlmResponse
@@ -167,7 +167,7 @@ public class Test { // Missing closing brace
 public class Test { }
 ```",
             TokensUsed = 120,
-            CostUSD = 0.0024m
+            Cost = 0.0024m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -207,7 +207,7 @@ public class Test { }
 public class Test { // Always invalid
 ```",
             TokensUsed = 100,
-            CostUSD = 0.002m
+            Cost = 0.002m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -243,7 +243,7 @@ public class Test { // Always invalid
         {
             Content = "Sorry, I cannot help with that.",
             TokensUsed = 50,
-            CostUSD = 0.001m
+            Cost = 0.001m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -305,7 +305,7 @@ public class Test { // Always invalid
                 {
                     Content = "Too slow",
                     TokensUsed = 100,
-                    CostUSD = 0.002m
+                    Cost = 0.002m
                 };
             });
 
@@ -358,7 +358,7 @@ public class Test { // Always invalid
 public class Test { }
 ```",
             TokensUsed = 150,
-            CostUSD = 0.003m
+            Cost = 0.003m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -400,7 +400,7 @@ FILE: src/file2.cs
 public class File2 { }
 ```",
             TokensUsed = 200,
-            CostUSD = 0.004m
+            Cost = 0.004m
         };
 
         _mockLlmClient.GenerateAsync(Arg.Any<LlmRequest>(), Arg.Any<CancellationToken>())
@@ -429,9 +429,9 @@ public class File2 { }
 
         var responses = new[]
         {
-            new LlmResponse { Content = "FILE: test.cs\n```cs\nbad\n```", TokensUsed = 100, CostUSD = 0.002m },
-            new LlmResponse { Content = "FILE: test.cs\n```cs\nalso bad\n```", TokensUsed = 120, CostUSD = 0.0024m },
-            new LlmResponse { Content = "FILE: test.cs\n```cs\npublic class Good { }\n```", TokensUsed = 150, CostUSD = 0.003m }
+            new LlmResponse { Content = "FILE: test.cs\n```cs\nbad\n```", TokensUsed = 100, Cost = 0.002m },
+            new LlmResponse { Content = "FILE: test.cs\n```cs\nalso bad\n```", TokensUsed = 120, Cost = 0.0024m },
+            new LlmResponse { Content = "FILE: test.cs\n```cs\npublic class Good { }\n```", TokensUsed = 150, Cost = 0.003m }
         };
 
         var callCount = 0;

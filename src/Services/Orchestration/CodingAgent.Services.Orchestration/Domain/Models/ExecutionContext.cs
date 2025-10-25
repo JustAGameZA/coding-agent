@@ -17,4 +17,5 @@ public class RelevantFile
 {
     public required string Path { get; init; }
     public required string Content { get; init; }
+    public string? Language { get; init; }
 }

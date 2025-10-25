@@ -22,5 +22,9 @@ public interface IExecutionStrategy
     /// <summary>
     /// Executes the strategy for the given task.
     /// </summary>
+    /// <param name="task">The task to execute</param>
+    /// <param name="context">Execution context with relevant files and metadata</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Execution result with changes and metrics</returns>
     Task<StrategyExecutionResult> ExecuteAsync(CodingTask task, TaskExecutionContext context, CancellationToken cancellationToken = default);
 }
