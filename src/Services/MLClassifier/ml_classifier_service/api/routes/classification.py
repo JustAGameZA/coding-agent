@@ -2,9 +2,10 @@
 
 import logging
 
+from api.rate_limiter import limiter
 from api.schemas.classification import ClassificationRequest, ClassificationResult
 from domain.classifiers.hybrid import HybridClassifier
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,10 @@ hybrid_classifier = HybridClassifier()
 
 
 @router.post("/", response_model=ClassificationResult)
-async def classify_task(request: ClassificationRequest) -> ClassificationResult:
+@limiter.limit("100/minute")
+async def classify_task(
+    request: Request, classification_request: ClassificationRequest
+) -> ClassificationResult:
     """
     Classify a coding task using hybrid approach.
 
@@ -26,21 +30,25 @@ async def classify_task(request: ClassificationRequest) -> ClassificationResult:
     3. LLM (slow, 98% accuracy) - fallback for low confidence
 
     Returns task type, complexity, confidence, and execution recommendations.
+    
+    Rate limited to 100 requests per minute per IP address.
 
     Args:
-        request: Classification request with task description
+        request: FastAPI request object for rate limiting
+        classification_request: Classification request with task description
 
     Returns:
         Classification result with task type, complexity, and recommendations
 
     Raises:
         HTTPException: If classification fails
+        RateLimitExceeded: If rate limit is exceeded
     """
     try:
-        logger.info(f"Classifying task: {request.task_description[:50]}...")
+        logger.info(f"Classifying task: {classification_request.task_description[:50]}...")
 
         # Use hybrid classifier (heuristic -> ML -> LLM cascade)
-        result = await hybrid_classifier.classify(request)
+        result = await hybrid_classifier.classify(classification_request)
 
         logger.info(
             f"Classification complete: type={result.task_type.value}, "
@@ -59,13 +67,17 @@ async def classify_task(request: ClassificationRequest) -> ClassificationResult:
 
 
 @router.post("/batch", response_model=list[ClassificationResult])
+@limiter.limit("100/minute")
 async def classify_tasks_batch(
-    requests: list[ClassificationRequest],
+    request: Request, requests: list[ClassificationRequest]
 ) -> list[ClassificationResult]:
     """
     Classify multiple tasks in batch using hybrid approach.
+    
+    Rate limited to 100 requests per minute per IP address.
 
     Args:
+        request: FastAPI request object for rate limiting
         requests: List of classification requests
 
     Returns:
@@ -73,13 +85,14 @@ async def classify_tasks_batch(
 
     Raises:
         HTTPException: If batch classification fails
+        RateLimitExceeded: If rate limit is exceeded
     """
     try:
         logger.info(f"Batch classifying {len(requests)} tasks...")
 
         results = []
-        for request in requests:
-            result = await hybrid_classifier.classify(request)
+        for req in requests:
+            result = await hybrid_classifier.classify(req)
             results.append(result)
 
         logger.info(f"Batch classification complete: {len(results)} tasks processed")
