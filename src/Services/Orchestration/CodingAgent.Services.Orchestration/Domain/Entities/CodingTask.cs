@@ -92,6 +92,29 @@ public class CodingTask : BaseEntity
         MarkAsUpdated();
     }
 
+    public void UpdateDetails(string title, string description)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            throw new ArgumentException("Title cannot be empty", nameof(title));
+        }
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            throw new ArgumentException("Description cannot be empty", nameof(description));
+        }
+
+        // Only allow updates if task is not yet started or in terminal state
+        if (Status == TaskStatus.InProgress)
+        {
+            throw new InvalidOperationException("Cannot update task while it is in progress");
+        }
+
+        Title = title;
+        Description = description;
+        MarkAsUpdated();
+    }
+
     /// <summary>
     /// Validates if the status transition is allowed based on the current state
     /// </summary>

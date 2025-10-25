@@ -18,6 +18,20 @@ public interface ITaskService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Updates an existing task's title and description.
+    /// </summary>
+    Task<CodingTask> UpdateTaskAsync(
+        Guid taskId,
+        string title,
+        string description,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a task.
+    /// </summary>
+    Task DeleteTaskAsync(Guid taskId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Classifies a task with type and complexity.
     /// </summary>
     Task ClassifyTaskAsync(

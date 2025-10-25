@@ -9,11 +9,13 @@ using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories
 using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Infrastructure;
 using CodingAgent.SharedKernel.Infrastructure.Messaging;
+using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.Threading.RateLimiting;
 using Polly;
 using Polly.Extensions.Http;
 
@@ -40,6 +42,50 @@ builder.Services.AddScoped<IExecutionRepository, ExecutionRepository>();
 
 // Register domain services
 builder.Services.AddScoped<ITaskService, TaskService>();
+
+// Register validators
+builder.Services.AddScoped<IValidator<CreateTaskRequest>, CreateTaskRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateTaskRequest>, UpdateTaskRequestValidator>();
+builder.Services.AddScoped<IValidator<ExecuteTaskRequest>, ExecuteTaskRequestValidator>();
+
+// Configure rate limiting - 10 executions per hour per user
+builder.Services.AddRateLimiter(options =>
+{
+    // Default user ID constant - TODO: Replace with authenticated user from JWT
+    const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        // Get user ID from context (for now using a default, will be replaced with actual auth)
+        var userId = context.Request.Headers["X-User-Id"].FirstOrDefault()
+            ?? DefaultUserId;
+
+        // Only apply rate limiting to execution endpoints
+        if (context.Request.Path.StartsWithSegments("/tasks") &&
+            context.Request.Path.Value?.Contains("/execute") == true)
+        {
+            return RateLimitPartition.GetFixedWindowLimiter(userId, _ =>
+                new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromHours(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0 // No queueing
+                });
+        }
+
+        // No rate limit for other endpoints
+        return RateLimitPartition.GetNoLimiter<string>(string.Empty);
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsync(
+            "Rate limit exceeded. Maximum 10 task executions per hour allowed.",
+            cancellationToken: token);
+    };
+});
 
 // Register event publisher
 builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
@@ -154,6 +200,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Enable rate limiting
+app.UseRateLimiter();
+
 // Map endpoints
 app.MapHealthChecks("/health");
 app.MapPrometheusScrapingEndpoint("/metrics");
@@ -181,21 +230,28 @@ using (var scope = app.Services.CreateScope())
 
 await app.RunAsync();
 
-// Polly policies for ML Classifier HTTP client
-static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+// Make Program accessible to tests and host Polly policy helpers
+public partial class Program
 {
-    return HttpPolicyExtensions
-        .HandleTransientHttpError()
-        .WaitAndRetryAsync(
-            retryCount: 2,
-            sleepDurationProvider: _ => TimeSpan.FromMilliseconds(50));
-}
+    // Prevent instantiation
+    protected Program() { }
 
-static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
-{
-    return HttpPolicyExtensions
-        .HandleTransientHttpError()
-        .CircuitBreakerAsync(
-            handledEventsAllowedBeforeBreaking: 3,
-            durationOfBreak: TimeSpan.FromSeconds(30));
+    // Polly policies for ML Classifier HTTP client
+    internal static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .WaitAndRetryAsync(
+                retryCount: 2,
+                sleepDurationProvider: _ => TimeSpan.FromMilliseconds(50));
+    }
+
+    internal static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .CircuitBreakerAsync(
+                handledEventsAllowedBeforeBreaking: 3,
+                durationOfBreak: TimeSpan.FromSeconds(30));
+    }
 }
