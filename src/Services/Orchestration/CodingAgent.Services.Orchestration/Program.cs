@@ -1,5 +1,7 @@
 using CodingAgent.Services.Orchestration.Api.Endpoints;
+using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
+using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
 using CodingAgent.SharedKernel.Infrastructure;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +25,10 @@ builder.Services.AddDbContext<OrchestrationDbContext>(options =>
         options.UseInMemoryDatabase("OrchestrationDb");
     }
 });
+
+// Register repositories
+builder.Services.AddScoped<ITaskRepository, TaskRepository>();
+builder.Services.AddScoped<IExecutionRepository, ExecutionRepository>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()

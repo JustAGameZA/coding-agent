@@ -13,6 +13,7 @@ public class OrchestrationDbContext : DbContext
 
     public DbSet<CodingTask> Tasks => Set<CodingTask>();
     public DbSet<TaskExecution> Executions => Set<TaskExecution>();
+    public DbSet<ExecutionResult> ExecutionResults => Set<ExecutionResult>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,17 +96,7 @@ public class OrchestrationDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(100);
 
-            entity.Property(e => e.TokensUsed)
-                .IsRequired();
-
-            entity.Property(e => e.CostUSD)
-                .IsRequired()
-                .HasPrecision(18, 6); // Precise cost tracking
-
-            entity.Property(e => e.Duration)
-                .IsRequired();
-
-            entity.Property(e => e.Result)
+            entity.Property(e => e.Status)
                 .IsRequired()
                 .HasConversion<string>(); // Store enum as string
 
@@ -119,10 +110,61 @@ public class OrchestrationDbContext : DbContext
             entity.Property(e => e.CompletedAt)
                 .IsRequired(false);
 
+            // Configure one-to-one relationship with ExecutionResult
+            entity.HasOne(e => e.Result)
+                .WithOne(r => r.Execution)
+                .HasForeignKey<ExecutionResult>(r => r.ExecutionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Indexes for common queries
             entity.HasIndex(e => e.TaskId);
             entity.HasIndex(e => e.StartedAt);
-            entity.HasIndex(e => e.Result);
+            entity.HasIndex(e => e.Status);
+        });
+
+        // Configure ExecutionResult entity
+        modelBuilder.Entity<ExecutionResult>(entity =>
+        {
+            entity.ToTable("execution_results");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id)
+                .ValueGeneratedNever(); // We generate GUIDs in the entity
+
+            entity.Property(e => e.ExecutionId)
+                .IsRequired();
+
+            entity.Property(e => e.Success)
+                .IsRequired();
+
+            entity.Property(e => e.Changes)
+                .IsRequired(false)
+                .HasMaxLength(50000); // Large text for code changes
+
+            entity.Property(e => e.TokensUsed)
+                .IsRequired();
+
+            entity.Property(e => e.CostUSD)
+                .IsRequired()
+                .HasPrecision(18, 6); // Precise cost tracking
+
+            entity.Property(e => e.ErrorDetails)
+                .IsRequired(false)
+                .HasMaxLength(10000);
+
+            entity.Property(e => e.FilesChanged)
+                .IsRequired();
+
+            entity.Property(e => e.LinesAdded)
+                .IsRequired();
+
+            entity.Property(e => e.LinesRemoved)
+                .IsRequired();
+
+            // Indexes for common queries
+            entity.HasIndex(e => e.ExecutionId)
+                .IsUnique();
+            entity.HasIndex(e => e.Success);
         });
     }
 }
