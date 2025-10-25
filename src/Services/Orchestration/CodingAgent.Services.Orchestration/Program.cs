@@ -90,8 +90,19 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Register event publisher
-builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+// Messaging configuration: enable MassTransit only when explicitly enabled and configured
+var messagingEnabled = builder.Configuration.GetValue<bool?>("Messaging:Enabled") ?? false;
+var rabbitConfigured = builder.Configuration.IsRabbitMQConfigured();
+
+if (messagingEnabled && rabbitConfigured)
+{
+    builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+}
+else
+{
+    // Fallback to no-op publisher for local/dev/test where RabbitMQ isn't available
+    builder.Services.AddScoped<IEventPublisher, NoOpEventPublisher>();
+}
 
 // Service metadata for telemetry
 var serviceName = "CodingAgent.Services.Orchestration";
@@ -121,7 +132,9 @@ builder.Services.AddHttpClient<IMLClassifierClient, MLClassifierClient>(client =
 {
     var mlClassifierBaseUrl = builder.Configuration["MLClassifier:BaseUrl"] ?? "http://localhost:8000";
     client.BaseAddress = new Uri(mlClassifierBaseUrl);
-    client.Timeout = TimeSpan.FromMilliseconds(100); // 100ms timeout for fast failure
+    var timeoutMs = builder.Configuration.GetValue<int?>("MLClassifier:TimeoutMs")
+        ?? (builder.Environment.IsProduction() ? 300 : 1000);
+    client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
 })
 .AddPolicyHandler(GetRetryPolicy())
 .AddPolicyHandler(GetCircuitBreakerPolicy());
@@ -167,18 +180,21 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddPrometheusExporter());
 
-// MassTransit + RabbitMQ with event publishing configuration
-builder.Services.AddMassTransit(x =>
+// MassTransit + RabbitMQ with event publishing configuration (enabled only when configured)
+if (messagingEnabled && rabbitConfigured)
 {
-    x.SetKebabCaseEndpointNameFormatter();
-    x.AddConsumers(typeof(Program).Assembly);
-
-    x.UsingRabbitMq((context, cfg) =>
+    builder.Services.AddMassTransit(x =>
     {
-        cfg.ConfigureEventPublishingForRabbitMq(builder.Configuration, builder.Environment);
-        cfg.ConfigureEndpoints(context);
+        x.SetKebabCaseEndpointNameFormatter();
+        x.AddConsumers(typeof(Program).Assembly);
+
+        x.UsingRabbitMq((context, cfg) =>
+        {
+            cfg.ConfigureEventPublishingForRabbitMq(builder.Configuration, builder.Environment);
+            cfg.ConfigureEndpoints(context);
+        });
     });
-});
+}
 
 // API documentation
 builder.Services.AddEndpointsApiExplorer();

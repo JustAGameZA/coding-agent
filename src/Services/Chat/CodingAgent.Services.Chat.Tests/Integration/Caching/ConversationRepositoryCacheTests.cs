@@ -15,6 +15,7 @@ namespace CodingAgent.Services.Chat.Tests.Integration.Caching;
 /// <summary>
 /// Integration tests for ConversationRepository with Redis caching
 /// </summary>
+[Trait("Category", "Integration")]
 public class ConversationRepositoryCacheTests : IAsyncLifetime
 {
     private RedisContainer? _redisContainer;
