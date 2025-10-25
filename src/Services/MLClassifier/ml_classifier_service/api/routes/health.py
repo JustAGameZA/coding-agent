@@ -1,6 +1,5 @@
 """Health check and service status routes."""
 
-import time
 from typing import Optional
 
 from fastapi import APIRouter

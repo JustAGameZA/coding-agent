@@ -2,11 +2,10 @@
 
 import logging
 
+from api.rate_limiter import limiter
 from api.schemas.classification import ClassificationRequest, ClassificationResult
 from domain.classifiers.hybrid import HybridClassifier
 from fastapi import APIRouter, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +14,6 @@ router = APIRouter(prefix="/classify", tags=["Classification"])
 # Initialize the hybrid classifier (singleton)
 # This uses heuristic -> ML -> LLM cascade with circuit breaker
 hybrid_classifier = HybridClassifier()
-
-# Initialize limiter for this router
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/", response_model=ClassificationResult)
@@ -34,15 +30,19 @@ async def classify_task(
     3. LLM (slow, 98% accuracy) - fallback for low confidence
 
     Returns task type, complexity, confidence, and execution recommendations.
+    
+    Rate limited to 100 requests per minute per IP address.
 
     Args:
-        request: Classification request with task description
+        request: FastAPI request object for rate limiting
+        classification_request: Classification request with task description
 
     Returns:
         Classification result with task type, complexity, and recommendations
 
     Raises:
         HTTPException: If classification fails
+        RateLimitExceeded: If rate limit is exceeded
     """
     try:
         logger.info(f"Classifying task: {classification_request.task_description[:50]}...")
@@ -73,8 +73,11 @@ async def classify_tasks_batch(
 ) -> list[ClassificationResult]:
     """
     Classify multiple tasks in batch using hybrid approach.
+    
+    Rate limited to 100 requests per minute per IP address.
 
     Args:
+        request: FastAPI request object for rate limiting
         requests: List of classification requests
 
     Returns:
@@ -82,6 +85,7 @@ async def classify_tasks_batch(
 
     Raises:
         HTTPException: If batch classification fails
+        RateLimitExceeded: If rate limit is exceeded
     """
     try:
         logger.info(f"Batch classifying {len(requests)} tasks...")

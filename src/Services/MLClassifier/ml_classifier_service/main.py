@@ -3,22 +3,19 @@
 import logging
 from contextlib import asynccontextmanager
 
+from api.rate_limiter import limiter
 from api.routes import classification, health
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-# Initialize rate limiter (100 requests per minute per IP)
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
 @asynccontextmanager
