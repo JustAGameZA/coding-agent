@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using SharedKernelTaskType = CodingAgent.SharedKernel.Domain.ValueObjects.TaskType;
 using SharedKernelTaskComplexity = CodingAgent.SharedKernel.Domain.ValueObjects.TaskComplexity;
 using SharedKernelExecutionStrategy = CodingAgent.SharedKernel.Domain.ValueObjects.ExecutionStrategy;
+using TaskStatus = CodingAgent.Services.Orchestration.Domain.Entities.TaskStatus;
 
 namespace CodingAgent.Services.Orchestration.Domain.Services;
 
@@ -51,6 +52,39 @@ public class TaskService : ITaskService
         _logger.LogInformation("Task {TaskId} created and event published", task.Id);
 
         return task;
+    }
+
+    public async Task<CodingTask> UpdateTaskAsync(
+        Guid taskId,
+        string title,
+        string description,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
+            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+
+        task.UpdateDetails(title, description);
+        await _taskRepository.UpdateAsync(task, cancellationToken);
+
+        _logger.LogInformation("Task {TaskId} updated", taskId);
+
+        return task;
+    }
+
+    public async Task DeleteTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId, cancellationToken)
+            ?? throw new InvalidOperationException($"Task with ID {taskId} not found");
+
+        // Don't allow deletion of tasks that are in progress
+        if (task.Status == TaskStatus.InProgress)
+        {
+            throw new InvalidOperationException("Cannot delete a task that is in progress");
+        }
+
+        await _taskRepository.DeleteAsync(task, cancellationToken);
+
+        _logger.LogInformation("Task {TaskId} deleted", taskId);
     }
 
     public async Task ClassifyTaskAsync(

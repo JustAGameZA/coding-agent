@@ -1,5 +1,7 @@
 using CodingAgent.Services.Orchestration.Domain.Entities;
+using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.SharedKernel.Abstractions;
+using CodingAgent.SharedKernel.Results;
 using TaskStatus = CodingAgent.Services.Orchestration.Domain.Entities.TaskStatus;
 
 namespace CodingAgent.Services.Orchestration.Domain.Repositories;
@@ -39,4 +41,14 @@ public interface ITaskRepository : IRepository<CodingTask>
     /// Counts tasks by status for a user
     /// </summary>
     Task<int> CountByStatusAsync(Guid userId, TaskStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets paginated tasks for a specific user with optional filtering
+    /// </summary>
+    Task<PagedResult<CodingTask>> GetPagedByUserIdAsync(
+        Guid userId,
+        PaginationParameters pagination,
+        TaskStatus? status = null,
+        TaskType? type = null,
+        CancellationToken cancellationToken = default);
 }

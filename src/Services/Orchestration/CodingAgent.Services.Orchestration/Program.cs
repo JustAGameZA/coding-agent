@@ -8,6 +8,7 @@ using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories
 using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Infrastructure;
 using CodingAgent.SharedKernel.Infrastructure.Messaging;
+using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
@@ -37,6 +38,11 @@ builder.Services.AddScoped<IExecutionRepository, ExecutionRepository>();
 
 // Register domain services
 builder.Services.AddScoped<ITaskService, TaskService>();
+
+// Register validators
+builder.Services.AddScoped<IValidator<CreateTaskRequest>, CreateTaskRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateTaskRequest>, UpdateTaskRequestValidator>();
+builder.Services.AddScoped<IValidator<ExecuteTaskRequest>, ExecuteTaskRequestValidator>();
 
 // Register event publisher
 builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();

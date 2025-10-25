@@ -1,5 +1,7 @@
 using CodingAgent.Services.Orchestration.Domain.Entities;
 using CodingAgent.Services.Orchestration.Domain.Repositories;
+using CodingAgent.Services.Orchestration.Domain.ValueObjects;
+using CodingAgent.SharedKernel.Results;
 using Microsoft.EntityFrameworkCore;
 using TaskStatus = CodingAgent.Services.Orchestration.Domain.Entities.TaskStatus;
 
@@ -110,5 +112,43 @@ public class TaskRepository : ITaskRepository
     {
         return await _context.Tasks
             .CountAsync(t => t.UserId == userId && t.Status == status, cancellationToken);
+    }
+
+    public async Task<PagedResult<CodingTask>> GetPagedByUserIdAsync(
+        Guid userId,
+        PaginationParameters pagination,
+        TaskStatus? status = null,
+        TaskType? type = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (pagination == null)
+        {
+            throw new ArgumentNullException(nameof(pagination));
+        }
+
+        // Build query with filters
+        var query = _context.Tasks.Where(t => t.UserId == userId);
+
+        if (status.HasValue)
+        {
+            query = query.Where(t => t.Status == status.Value);
+        }
+
+        if (type.HasValue)
+        {
+            query = query.Where(t => t.Type == type.Value);
+        }
+
+        // Get total count
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        // Get paginated items
+        var items = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .Skip(pagination.Skip)
+            .Take(pagination.Take)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<CodingTask>(items, totalCount, pagination.PageNumber, pagination.PageSize);
     }
 }
