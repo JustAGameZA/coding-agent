@@ -47,19 +47,12 @@ public static class MassTransitPublishingExtensions
         // Configure host
         cfg.ConfigureRabbitMQHost(configuration, hostEnvironment);
 
-        // Configure general event publishing settings
+        // Configure general event publishing settings (retry logic)
         cfg.ConfigureEventPublishing();
-
-        // Configure dead-letter exchange for failed messages
-        cfg.Send<object>(x =>
-        {
-            x.UseRoutingKeyFormatter(context => context.Message.GetType().Name);
-        });
-
-        cfg.Publish<object>(x =>
-        {
-            x.Durable = true; // Persist messages
-            x.AutoDelete = false; // Don't auto-delete exchanges
-        });
+        
+        // RabbitMQ default settings already include:
+        // - Durable exchanges and queues
+        // - Dead-letter exchange routing for failed messages
+        // - Message persistence
     }
 }
