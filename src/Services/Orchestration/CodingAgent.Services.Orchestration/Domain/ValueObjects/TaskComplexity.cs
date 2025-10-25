@@ -19,5 +19,10 @@ public enum TaskComplexity
     /// <summary>
     /// Complex tasks (200-1000 LOC). Uses MultiAgent strategy with gpt-4o + claude-3.5-sonnet.
     /// </summary>
-    Complex
+    Complex,
+
+    /// <summary>
+    /// Epic tasks (&gt; 1000 LOC). Uses HybridExecution strategy with ensemble of models.
+    /// </summary>
+    Epic
 }

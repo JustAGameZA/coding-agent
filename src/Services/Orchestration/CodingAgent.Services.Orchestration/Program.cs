@@ -1,6 +1,8 @@
 using CodingAgent.Services.Orchestration.Api.Endpoints;
 using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Domain.Services;
+using CodingAgent.Services.Orchestration.Domain.Strategies;
+using CodingAgent.Services.Orchestration.Infrastructure.LLM;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
 using CodingAgent.SharedKernel.Abstractions;
@@ -38,6 +40,12 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 
 // Register event publisher
 builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+
+// Register execution strategies and dependencies
+// TODO: Replace mock implementations with real LLM and validator implementations in future phases
+builder.Services.AddScoped<ILlmClient, MockLlmClient>();
+builder.Services.AddScoped<ICodeValidator, MockCodeValidator>();
+builder.Services.AddScoped<IExecutionStrategy, IterativeStrategy>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()

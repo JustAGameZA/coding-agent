@@ -1,3 +1,6 @@
+using CodingAgent.Services.Orchestration.Domain.Entities;
+using CodingAgent.Services.Orchestration.Domain.Models;
+
 namespace CodingAgent.Services.Orchestration.Domain.Strategies;
 
 /// <summary>
@@ -16,6 +19,8 @@ public interface IExecutionStrategy
     /// </summary>
     ValueObjects.TaskComplexity SupportsComplexity { get; }
 
-    // Note: Actual execution methods will be added in later phases
-    // Task<ExecutionResult> ExecuteAsync(CodingTask task, ExecutionContext context, CancellationToken ct = default);
+    /// <summary>
+    /// Executes the strategy for the given task.
+    /// </summary>
+    Task<StrategyExecutionResult> ExecuteAsync(CodingTask task, TaskExecutionContext context, CancellationToken cancellationToken = default);
 }
