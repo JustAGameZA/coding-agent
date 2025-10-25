@@ -137,13 +137,14 @@ class HeuristicClassifier:
 
         # No matches - default to FEATURE with low confidence
         if not match_counts:
+            complexity = self._classify_complexity(task_description)
             return ClassificationResult(
                 task_type=TaskType.FEATURE,
-                complexity=self._classify_complexity(task_description),
+                complexity=complexity,
                 confidence=0.3,
                 reasoning="No keyword matches found, defaulting to FEATURE",
-                suggested_strategy="Iterative",
-                estimated_tokens=2000,
+                suggested_strategy=self._suggest_strategy(complexity),
+                estimated_tokens=self._estimate_tokens(complexity),
                 classifier_used="heuristic",
             )
 
