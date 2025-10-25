@@ -1,8 +1,5 @@
-<todos title="Address PR #115 review comments and merge" rule="Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it.">
-- [x] fix-url-escaping: Remove unnecessary Uri.EscapeDataString() calls for numeric page and pageSize parameters in HATEOAS link generation 🔴
-- [x] resolve-merge-conflicts: Merge latest master into branch to resolve conflicts 🔴
-- [-] run-tests-pr115: Run Chat service tests to verify changes 🔴
-- [ ] merge-pr115: Commit changes, push to branch, and merge PR into master 🔴
+<todos title="Todos" rule="Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it.">
+- No current todos
 </todos>
 
 <!-- Todos: Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it. -->
@@ -263,6 +260,20 @@ span.SetAttribute("task.type", taskType);
   - Fast local development: `dotnet test --filter "Category=Unit"` (< 1 second)
   - Separate CI stages: Unit tests run first, integration tests in parallel jobs
   - Avoiding VS Code "not responding" dialogs during slow integration test runs
+
+### Test Execution Commands
+Always use `.runsettings` for optimal parallel test execution:
+
+```bash
+# All tests with parallel execution
+dotnet test --settings .runsettings --no-build --verbosity minimal
+
+# Unit tests only (fast, < 1 second)
+dotnet test --settings .runsettings --no-build --verbosity minimal --filter "Category=Unit"
+
+# Integration tests only (Testcontainers)
+dotnet test --settings .runsettings --no-build --verbosity minimal --filter "Category=Integration"
+```
 
 ### Unit Tests (Domain + Application layers)
 ```csharp

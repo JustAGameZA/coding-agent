@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <!-- use all logical cores -->
+    <MaxCpuCount>16</MaxCpuCount>
+    <!-- keep test results cached in memory -->
+    <DisableAppDomain>false</DisableAppDomain>
+  </RunConfiguration>
+  <DataCollectionRunSettings>
+    <DataCollectors />
+  </DataCollectionRunSettings>
+  <NUnit>
+    <NumberOfTestWorkers>16</NumberOfTestWorkers>
+  </NUnit>
+  <MSTest>
+    <Parallelize>
+      <Workers>16</Workers>
+      <Scope>ClassLevel</Scope>
+    </Parallelize>
+  </MSTest>
+  <xUnit>
+    <MaxParallelThreads>16</MaxParallelThreads>
+    <ParallelizeTestCollections>true</ParallelizeTestCollections>
+    <ParallelizeAssemblies>true</ParallelizeAssemblies>
+  </xUnit>
+</RunSettings>
