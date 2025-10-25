@@ -37,13 +37,14 @@
 - ✅ All Orchestration unit tests green (161 tests)
 - 🔜 Add strategy selector to route by complexity (Simple → SingleShot, Medium → Iterative, Complex → MultiAgent)
 
-**Phase 2 ML Classifier — Batch 1 Complete!** ✅ (PRs #122, #123 merged 2025-10-25)
+**Phase 2 ML Classifier — Batch 1 Complete!** ✅ (PRs #122, #123, #127 merged 2025-10-25)
 - ✅ Heuristic classifier implemented with comprehensive tests; fixed no-keyword-match bug to derive strategy/tokens from complexity (100% coverage on module)
 - ✅ ML Classifier (XGBoost) implemented with 122-feature extractor and model loader; dummy model shipped for dev/testing
 - ✅ Performance: average latency ~1.26ms (well under 50ms target); coverage ~98% across ML components
-- ✅ REST: `/classify` endpoint live (heuristic-first); hybrid wiring (heuristic → ML → LLM) planned next
+- ✅ REST API production-ready: rate limiting (100 req/min via slowapi), validation (10-10K chars), enhanced health checks with dependency status (PR #127)
+- ✅ Testing: 145 tests passing (109 unit + 36 integration) with comprehensive coverage
 - ✅ Documentation added: `ML_CLASSIFIER_IMPLEMENTATION.md`, `models/README.md`; model versioning enabled via file naming
-- 🔜 Add CI job for Python tests and caching; add `/train` endpoint + event listener for `TaskCompletedEvent`
+- 🔜 Wire hybrid routing (heuristic → ML → LLM) into `/classify`; add `/train` endpoint + event listener for `TaskCompletedEvent`; add CI job for Python tests
 
 Next up (priority): Phase 2 Orchestration Batch 2 — API & Integration
 - Implement task CRUD endpoints and SSE logs streaming
@@ -312,10 +313,14 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete.
 
 **Days 8-10: REST API & Integration**
 - [x] Implement `/classify` endpoint (currently heuristic-first)
+- [x] Add rate limiting (100 req/min per IP via slowapi) — **PR #127 merged 2025-10-25**
+- [x] Add input validation (10-10K char task descriptions) — **PR #127 merged 2025-10-25**
+- [x] Enhance health checks with classifier dependency status — **PR #127 merged 2025-10-25**
+- [x] Write integration tests for validation, rate limiting, health — **PR #127 merged 2025-10-25**
 - [ ] Add `/train` endpoint (trigger retraining)
 - [ ] Implement event listener for `TaskCompletedEvent` (training data collection)
 - [x] Add model versioning (save models with versioned filenames)
-- **Deliverable**: ML service API available; integration with Orchestration pending (hybrid + training)
+- **Deliverable**: ✅ ML service REST API production-ready (145 tests passing); training integration pending
 
 ---
 
