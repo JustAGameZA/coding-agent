@@ -163,7 +163,7 @@ public class SingleShotStrategyTests
         {
             RelevantFiles = new List<RelevantFile>
             {
-                new RelevantFile("src/Validator.cs", "public class Validator { }", "csharp")
+                new RelevantFile { Path = "src/Validator.cs", Content = "public class Validator { }", Language = "csharp" }
             }
         };
 
@@ -187,9 +187,9 @@ public class SingleShotStrategyTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.TokensUsed.Should().Be(150);
-        result.CostUSD.Should().Be(0.03m);
-        result.FilesChanged.Should().Be(1);
+        result.TotalTokensUsed.Should().Be(150);
+        result.TotalCostUSD.Should().Be(0.03m);
+        result.Changes.Count.Should().Be(1);
         result.Changes.Should().NotBeNullOrEmpty();
     }
 
@@ -222,9 +222,9 @@ public class SingleShotStrategyTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.ErrorDetails.Should().Contain("validation failed");
-        result.TokensUsed.Should().Be(100);
-        result.CostUSD.Should().Be(0.02m);
+        result.Errors.Should().Contain(e => e.Contains("validation", StringComparison.OrdinalIgnoreCase));
+        result.TotalTokensUsed.Should().Be(100);
+        result.TotalCostUSD.Should().Be(0.02m);
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public class SingleShotStrategyTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.ErrorDetails.Should().Contain("No code changes");
+        result.Errors.Should().Contain(e => e.Contains("No code changes", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class SingleShotStrategyTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.ErrorDetails.Should().Contain("Execution failed");
+        result.Errors.Should().Contain(e => e.Contains("Execution failed", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -297,7 +297,7 @@ public class SingleShotStrategyTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.ErrorDetails.Should().Contain("cancelled");
+        result.Errors.Should().Contain(e => e.Contains("cancelled", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -311,8 +311,8 @@ public class SingleShotStrategyTests
         {
             RelevantFiles = new List<RelevantFile>
             {
-                new RelevantFile("src/Validator.cs", "public class Validator { }", "csharp"),
-                new RelevantFile("src/Helper.cs", "public class Helper { }", "csharp")
+                new RelevantFile { Path = "src/Validator.cs", Content = "public class Validator { }", Language = "csharp" },
+                new RelevantFile { Path = "src/Helper.cs", Content = "public class Helper { }", Language = "csharp" }
             }
         };
 
@@ -412,7 +412,7 @@ public class File2 { }
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.FilesChanged.Should().Be(2);
+        result.Changes.Count.Should().Be(2);
     }
 
     [Fact]
@@ -451,6 +451,6 @@ public class NewClass
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.LinesAdded.Should().BeGreaterThan(0);
+        result.Changes.Any(c => !string.IsNullOrWhiteSpace(c.Content)).Should().BeTrue();
     }
 }

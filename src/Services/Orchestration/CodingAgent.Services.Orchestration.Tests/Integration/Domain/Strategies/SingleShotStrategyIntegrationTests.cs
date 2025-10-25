@@ -47,9 +47,10 @@ public class SingleShotStrategyIntegrationTests
         {
             RelevantFiles = new List<RelevantFile>
             {
-                new RelevantFile(
-                    "src/UserService.cs",
-                    @"public class UserService
+                new RelevantFile
+                {
+                    Path = "src/UserService.cs",
+                    Content = @"public class UserService
 {
     public User GetUser(int id)
     {
@@ -57,7 +58,8 @@ public class SingleShotStrategyIntegrationTests
         return user; // Potential null reference
     }
 }",
-                    "csharp")
+                    Language = "csharp"
+                }
             }
         };
 
@@ -67,11 +69,11 @@ public class SingleShotStrategyIntegrationTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.TokensUsed.Should().BeGreaterThan(0);
-        result.CostUSD.Should().BeGreaterThan(0);
-        result.FilesChanged.Should().Be(1);
+        result.TotalTokensUsed.Should().BeGreaterThan(0);
+        result.TotalCostUSD.Should().BeGreaterThan(0);
+        result.Changes.Count.Should().Be(1);
         result.Changes.Should().NotBeNullOrEmpty();
-        result.Changes.Should().Contain("null");
+        result.Changes.Any(c => c.Content.Contains("null")).Should().BeTrue();
     }
 
     [Fact(Skip = "Integration test - requires real LLM API key. Run manually when needed.")]
@@ -92,16 +94,18 @@ public class SingleShotStrategyIntegrationTests
         {
             RelevantFiles = new List<RelevantFile>
             {
-                new RelevantFile(
-                    "src/UserService.cs",
-                    @"public class UserService
+                new RelevantFile
+                {
+                    Path = "src/UserService.cs",
+                    Content = @"public class UserService
 {
     public User GetUser(int id)
     {
         return _repository.FindById(id);
     }
 }",
-                    "csharp")
+                    Language = "csharp"
+                }
             }
         };
 
@@ -111,8 +115,8 @@ public class SingleShotStrategyIntegrationTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.FilesChanged.Should().Be(1);
-        result.LinesAdded.Should().BeGreaterThan(0);
+        result.Changes.Count.Should().Be(1);
+        result.Changes.Any(c => !string.IsNullOrWhiteSpace(c.Content)).Should().BeTrue();
     }
 
     [Fact(Skip = "Integration test - requires real LLM API key. Run manually when needed.")]
@@ -157,10 +161,12 @@ public class SingleShotStrategyIntegrationTests
         {
             RelevantFiles = new List<RelevantFile>
             {
-                new RelevantFile(
-                    "src/UserService.cs",
-                    "public class UserService { public void CreateUser(string name) { } }",
-                    "csharp")
+                new RelevantFile
+                {
+                    Path = "src/UserService.cs",
+                    Content = "public class UserService { public void CreateUser(string name) { } }",
+                    Language = "csharp"
+                }
             }
         };
 
@@ -195,7 +201,7 @@ public class SingleShotStrategyIntegrationTests
         var result = await strategy.ExecuteAsync(task, context);
 
         // Assert
-        result.CostUSD.Should().BeLessThan(0.05m,
+        result.TotalCostUSD.Should().BeLessThan(0.05m,
             "Simple tasks should cost less than 5 cents with gpt-4o-mini");
     }
 
