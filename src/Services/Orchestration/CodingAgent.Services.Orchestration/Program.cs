@@ -2,6 +2,7 @@ using CodingAgent.Services.Orchestration.Api.Endpoints;
 using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Domain.Services;
 using CodingAgent.Services.Orchestration.Domain.Strategies;
+using CodingAgent.Services.Orchestration.Infrastructure.ExternalServices;
 using CodingAgent.Services.Orchestration.Infrastructure.LLM;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence;
 using CodingAgent.Services.Orchestration.Infrastructure.Persistence.Repositories;
@@ -13,6 +14,8 @@ using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Polly;
+using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +66,19 @@ builder.Services.AddScoped<ITesterAgent, TesterAgent>();
 builder.Services.AddScoped<IExecutionStrategy, SingleShotStrategy>();
 builder.Services.AddScoped<IExecutionStrategy, IterativeStrategy>();
 builder.Services.AddScoped<IExecutionStrategy, MultiAgentStrategy>();
+
+// Register ML Classifier HTTP client with retry policy
+builder.Services.AddHttpClient<IMLClassifierClient, MLClassifierClient>(client =>
+{
+    var mlClassifierBaseUrl = builder.Configuration["MLClassifier:BaseUrl"] ?? "http://localhost:8000";
+    client.BaseAddress = new Uri(mlClassifierBaseUrl);
+    client.Timeout = TimeSpan.FromMilliseconds(100); // 100ms timeout for fast failure
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+// Register Strategy Selector
+builder.Services.AddScoped<IStrategySelector, StrategySelector>();
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()
@@ -164,3 +180,26 @@ using (var scope = app.Services.CreateScope())
 }
 
 await app.RunAsync();
+
+// Polly policies for ML Classifier HTTP client
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(
+            retryCount: 2,
+            sleepDurationProvider: retryAttempt => TimeSpan.FromMilliseconds(50),
+            onRetry: (outcome, timespan, retryCount, context) =>
+            {
+                // Log retry attempts if needed
+            });
+}
+
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(
+            handledEventsAllowedBeforeBreaking: 3,
+            durationOfBreak: TimeSpan.FromSeconds(30));
+}
