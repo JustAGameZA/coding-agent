@@ -47,8 +47,23 @@ jobs:
       - name: Build
         run: dotnet build CodingAgent.sln -c Release --no-restore
 
-      - name: Test
-        run: dotnet test CodingAgent.sln -c Release --no-build --logger "trx;LogFileName=test_results.trx"
+      - name: Install Playwright browsers
+        run: |
+          # Install PowerShell if not present
+          if ! command -v pwsh &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y powershell
+          fi
+          # Build the Browser service to get playwright.ps1
+          dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Release --no-restore
+          # Install Playwright browsers
+          pwsh src/Services/Browser/CodingAgent.Services.Browser/bin/Release/playwright.ps1 install chromium firefox --with-deps
+
+      - name: Test (Unit)
+        run: dotnet test CodingAgent.sln -c Release --no-build --filter "Category=Unit" --logger "trx;LogFileName=unit_test_results.trx"
+
+      - name: Test (Integration)
+        run: dotnet test CodingAgent.sln -c Release --no-build --filter "Category=Integration" --logger "trx;LogFileName=integration_test_results.trx"
 
       - name: Conditional Docker build
         run: |
