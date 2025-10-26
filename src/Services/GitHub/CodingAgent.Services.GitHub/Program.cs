@@ -29,6 +29,7 @@ builder.Services.AddSingleton<IGitHubClient>(sp =>
 // Register GitHub Services
 builder.Services.AddScoped<IGitHubService, GitHubService>();
 builder.Services.AddScoped<IWebhookService, WebhookService>();
+builder.Services.AddScoped<ICodeReviewService, CodeReviewService>();
 
 // Configure MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>

@@ -53,6 +53,11 @@ public static class PullRequestEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("{owner}/{repo}/{number:int}/review", ReviewPullRequest)
+            .WithName("ReviewPullRequest")
+            .Produces<CodeReviewResultResponse>()
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("template", GetPRTemplate)
             .WithName("GetPRTemplate")
             .Produces<PullRequestTemplateResponse>();
@@ -241,6 +246,43 @@ public static class PullRequestEndpoints
         }
     }
 
+    private static async Task<IResult> ReviewPullRequest(
+        string owner,
+        string repo,
+        int number,
+        ICodeReviewService codeReviewService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Analyze the PR
+            var result = await codeReviewService.AnalyzePullRequestAsync(owner, repo, number, cancellationToken);
+
+            // Post review comments
+            await codeReviewService.PostReviewCommentsAsync(owner, repo, number, result, cancellationToken);
+
+            // Return the review result
+            var response = new CodeReviewResultResponse(
+                result.RequestChanges,
+                result.Summary,
+                result.Issues.Select(i => new CodeReviewIssueResponse(
+                    i.Severity,
+                    i.IssueType,
+                    i.FilePath,
+                    i.LineNumber,
+                    i.Description,
+                    i.Suggestion
+                )).ToList()
+            );
+
+            return Results.Ok(response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.NotFound(new { error = ex.Message });
+        }
+    }
+
     private static Task<IResult> GetPRTemplate()
     {
         var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Templates", "PullRequestTemplate.md");
@@ -320,6 +362,19 @@ public record RequestReviewRequest(IEnumerable<string> Reviewers);
 public record ApprovePullRequestRequest(string? Body = null);
 
 public record PullRequestTemplateResponse(string Template);
+
+public record CodeReviewResultResponse(
+    bool RequestChanges,
+    string Summary,
+    List<CodeReviewIssueResponse> Issues);
+
+public record CodeReviewIssueResponse(
+    string Severity,
+    string IssueType,
+    string FilePath,
+    int? LineNumber,
+    string Description,
+    string? Suggestion);
 
 public record PullRequestResponse(
     long GitHubId,
