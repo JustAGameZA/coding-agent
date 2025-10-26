@@ -81,19 +81,20 @@ The test project uses `coverlet.runsettings` to:
 
 #### Run all tests:
 ```bash
-dotnet test src/Services/Chat/CodingAgent.Services.Chat.Tests/CodingAgent.Services.Chat.Tests.csproj
+dotnet test src/Services/Chat/CodingAgent.Services.Chat.Tests/CodingAgent.Services.Chat.Tests.csproj --verbosity quiet --nologo
 ```
 
 #### Run unit tests only:
 ```bash
-dotnet test src/Services/Chat/CodingAgent.Services.Chat.Tests/CodingAgent.Services.Chat.Tests.csproj --filter "FullyQualifiedName~Unit"
+dotnet test src/Services/Chat/CodingAgent.Services.Chat.Tests/CodingAgent.Services.Chat.Tests.csproj --filter "FullyQualifiedName~Unit" --verbosity quiet --nologo
 ```
 
 #### Run with coverage:
 ```bash
 dotnet test src/Services/Chat/CodingAgent.Services.Chat.Tests/CodingAgent.Services.Chat.Tests.csproj \
   --collect:"XPlat Code Coverage" \
-  --settings:src/Services/Chat/CodingAgent.Services.Chat.Tests/coverlet.runsettings
+  --settings:src/Services/Chat/CodingAgent.Services.Chat.Tests/coverlet.runsettings \
+  --verbosity quiet --nologo
 ```
 
 ## Test Design Principles

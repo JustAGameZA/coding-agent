@@ -257,23 +257,25 @@ span.SetAttribute("task.type", taskType);
 - **Unit tests** must have `[Trait("Category", "Unit")]` - fast tests with no external dependencies
 - **Integration tests** must have `[Trait("Category", "Integration")]` - tests using Testcontainers, databases, or external services
 - This enables:
-  - Fast local development: `dotnet test --filter "Category=Unit"` (< 1 second)
-  - Separate CI stages: Unit tests run first, integration tests in parallel jobs
-  - Avoiding VS Code "not responding" dialogs during slow integration test runs
+    - Fast local development: `dotnet test --filter "Category=Unit" --verbosity quiet --nologo` (< 1 second)
+    - Separate CI stages: Unit tests run first, integration tests in parallel jobs
+    - Avoiding VS Code "not responding" dialogs during slow integration test runs
 
 ### Test Execution Commands
 Always use `.runsettings` for optimal parallel test execution:
 
 ```bash
 # All tests with parallel execution
-dotnet test --settings .runsettings --no-build --verbosity minimal
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo
 
 # Unit tests only (fast, < 1 second)
-dotnet test --settings .runsettings --no-build --verbosity minimal --filter "Category=Unit"
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Unit"
 
 # Integration tests only (Testcontainers)
-dotnet test --settings .runsettings --no-build --verbosity minimal --filter "Category=Integration"
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Integration"
 ```
+
+> **Crash Prevention**: Always run `dotnet test` with `--verbosity quiet --nologo`. Higher verbosity produces enough console output to freeze VS Code and Copilot. Use `--filter` to target a single test when you need more detail.
 
 ### Unit Tests (Domain + Application layers)
 ```csharp

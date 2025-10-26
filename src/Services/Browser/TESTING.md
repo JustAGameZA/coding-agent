@@ -163,25 +163,25 @@ wait
 ### Unit Tests Only (Fast)
 
 ```bash
-dotnet test --filter "Category=Unit"
+dotnet test --filter "Category=Unit" --verbosity quiet --nologo
 ```
 
 ### Integration Tests (Requires Browsers)
 
 ```bash
-dotnet test --filter "Category=Integration"
+dotnet test --filter "Category=Integration" --verbosity quiet --nologo
 ```
 
 ### All Tests
 
 ```bash
-dotnet test
+dotnet test --verbosity quiet --nologo
 ```
 
 ### With Coverage
 
 ```bash
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test --collect:"XPlat Code Coverage" --verbosity quiet --nologo
 ```
 
 ## Docker Testing

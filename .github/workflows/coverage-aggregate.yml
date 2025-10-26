@@ -47,7 +47,8 @@ jobs:
         run: |
           dotnet test CodingAgent.sln \
             --logger "trx" \
-            --collect:"XPlat Code Coverage"
+            --collect:"XPlat Code Coverage" \
+            --verbosity quiet --nologo
 
       - name: Find .NET Cobertura files
         id: find_cobertura
