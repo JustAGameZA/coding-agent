@@ -32,18 +32,18 @@ public class HardwareDetector : IHardwareDetector
 
         try
         {
-            // Try to get GPU info from Ollama backend first
+            // Try to detect GPU via system tools first (nvidia-smi/rocm-smi)
             var ollamaInfo = await TryGetOllamaSystemInfoAsync(cancellationToken);
             if (ollamaInfo != null)
             {
                 _logger.LogInformation(
-                    "Hardware detected from Ollama: {GpuType} with {VramGB}GB VRAM, {CpuCores} CPU cores, {RamGB}GB RAM",
+                    "Hardware detected via system tools: {GpuType} with {VramGB}GB VRAM, {CpuCores} CPU cores, {RamGB}GB RAM",
                     ollamaInfo.GpuType, ollamaInfo.VramGB, ollamaInfo.CpuCores, ollamaInfo.RamGB);
                 return ollamaInfo;
             }
 
-            // Fallback to system-level detection
-            _logger.LogWarning("Could not get hardware info from Ollama, falling back to system detection");
+            // Fallback to generic system hardware detection
+            _logger.LogWarning("Could not detect GPU via system tools, falling back to generic system detection");
             var systemProfile = await DetectSystemHardwareAsync(cancellationToken);
 
             _logger.LogInformation(
@@ -131,9 +131,9 @@ public class HardwareDetector : IHardwareDetector
     {
         try
         {
-            // Try to query Ollama for system information
-            // Note: Ollama doesn't have a direct system info API, so this method falls back to
-            // system-level GPU detection (e.g., via nvidia-smi/rocm-smi) when backend info is unavailable
+            // Try to detect hardware via system-level tools
+            // Note: Ollama doesn't expose a direct system info API; we rely on GPU tooling
+            // (e.g., nvidia-smi/rocm-smi) and OS queries to build a hardware profile.
             var (gpuType, vramGB) = await DetectGpuFromOllamaProcessAsync(cancellationToken);
 
             return new HardwareProfile
