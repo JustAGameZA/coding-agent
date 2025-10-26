@@ -4,6 +4,7 @@ using CodingAgent.Services.CICDMonitor.Infrastructure.GitHub;
 using CodingAgent.SharedKernel.Domain.Events;
 using MassTransit;
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CodingAgent.Services.CICDMonitor.Application.Services;
 
@@ -13,26 +14,26 @@ namespace CodingAgent.Services.CICDMonitor.Application.Services;
 public class BuildMonitor : BackgroundService
 {
     private readonly IGitHubActionsClient _githubClient;
-    private readonly IBuildRepository _buildRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<BuildMonitor> _logger;
     private readonly IConfiguration _configuration;
     private readonly ActivitySource _activitySource;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public BuildMonitor(
         IGitHubActionsClient githubClient,
-        IBuildRepository buildRepository,
         IPublishEndpoint publishEndpoint,
         ILogger<BuildMonitor> logger,
         IConfiguration configuration,
-        ActivitySource activitySource)
+        ActivitySource activitySource,
+        IServiceScopeFactory scopeFactory)
     {
         _githubClient = githubClient ?? throw new ArgumentNullException(nameof(githubClient));
-        _buildRepository = buildRepository ?? throw new ArgumentNullException(nameof(buildRepository));
         _publishEndpoint = publishEndpoint ?? throw new ArgumentNullException(nameof(publishEndpoint));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -107,11 +108,15 @@ public class BuildMonitor : BackgroundService
             repository,
             cancellationToken);
 
+        // Resolve scoped repository within a scope for this polling unit of work
+        using var scope = _scopeFactory.CreateScope();
+        var buildRepository = scope.ServiceProvider.GetRequiredService<IBuildRepository>();
+
         foreach (var build in workflowRuns)
         {
             try
             {
-                await ProcessBuildAsync(build, cancellationToken);
+                await ProcessBuildAsync(build, buildRepository, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -125,7 +130,7 @@ public class BuildMonitor : BackgroundService
         }
 
         // Clean up old builds beyond retention limit
-        await _buildRepository.DeleteOldBuildsAsync(
+        await buildRepository.DeleteOldBuildsAsync(
             owner,
             repository,
             retentionLimit: 100,
@@ -134,10 +139,11 @@ public class BuildMonitor : BackgroundService
 
     private async Task ProcessBuildAsync(
         Domain.Entities.Build build,
+        IBuildRepository repository,
         CancellationToken cancellationToken)
     {
         // Check if we already have this build
-        var existingBuild = await _buildRepository.GetByWorkflowRunIdAsync(
+        var existingBuild = await repository.GetByWorkflowRunIdAsync(
             build.WorkflowRunId,
             cancellationToken);
 
@@ -151,7 +157,7 @@ public class BuildMonitor : BackgroundService
                 existingBuild.UpdatedAt = build.UpdatedAt;
                 existingBuild.CompletedAt = build.CompletedAt;
 
-                await _buildRepository.UpdateAsync(existingBuild, cancellationToken);
+                await repository.UpdateAsync(existingBuild, cancellationToken);
 
                 _logger.LogInformation(
                     "Updated build {WorkflowRunId} status to {Status}",
@@ -161,14 +167,14 @@ public class BuildMonitor : BackgroundService
                 // If build failed, fetch logs and publish event
                 if (build.Status == BuildStatus.Failure)
                 {
-                    await HandleBuildFailureAsync(existingBuild, cancellationToken);
+                    await HandleBuildFailureAsync(existingBuild, repository, cancellationToken);
                 }
             }
         }
         else
         {
             // New build - add it
-            var savedBuild = await _buildRepository.AddAsync(build, cancellationToken);
+            var savedBuild = await repository.AddAsync(build, cancellationToken);
 
             _logger.LogInformation(
                 "Detected new build {WorkflowRunId} with status {Status}",
@@ -178,13 +184,14 @@ public class BuildMonitor : BackgroundService
             // If build is already failed when first detected
             if (build.Status == BuildStatus.Failure)
             {
-                await HandleBuildFailureAsync(savedBuild, cancellationToken);
+                await HandleBuildFailureAsync(savedBuild, repository, cancellationToken);
             }
         }
     }
 
     private async Task HandleBuildFailureAsync(
         Domain.Entities.Build build,
+        IBuildRepository repository,
         CancellationToken cancellationToken)
     {
         using var activity = _activitySource.StartActivity("HandleBuildFailure");
@@ -208,7 +215,7 @@ public class BuildMonitor : BackgroundService
                 cancellationToken);
 
             build.ErrorMessages = errorMessages.ToList();
-            await _buildRepository.UpdateAsync(build, cancellationToken);
+            await repository.UpdateAsync(build, cancellationToken);
 
             // Publish BuildFailedEvent
             var buildFailedEvent = new BuildFailedEvent
