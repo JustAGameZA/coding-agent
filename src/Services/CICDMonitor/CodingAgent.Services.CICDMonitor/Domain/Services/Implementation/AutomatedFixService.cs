@@ -18,17 +18,18 @@ public class AutomatedFixService : IAutomatedFixService
     private readonly IEventPublisher _eventPublisher;
     private readonly ILogger<AutomatedFixService> _logger;
 
-    // Known error patterns that should be automatically fixed
-    private static readonly Dictionary<string, string> ErrorPatterns = new()
-    {
-        { "compilation_error", @"error (CS|BC)\d{4}:" },
-        { "test_failure", @"Test.*failed|Failed.*test" },
-        { "lint_error", @"ESLint|TSLint|lint error" },
-        { "missing_dependency", @"Cannot find module|ModuleNotFoundError" },
-        { "syntax_error", @"SyntaxError|syntax error" },
-        { "null_reference", @"NullReferenceException|null reference" },
-        { "timeout", @"timeout|timed out" }
-    };
+    // Known error patterns that should be automatically fixed (compiled for performance)
+    private static readonly IReadOnlyDictionary<string, Regex> ErrorPatterns =
+        new Dictionary<string, Regex>
+        {
+            ["compilation_error"] = new Regex(@"error (CS|BC)\d{4}:", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["test_failure"]      = new Regex(@"Test.*failed|Failed.*test", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["lint_error"]        = new Regex(@"ESLint|TSLint|lint error", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["missing_dependency"] = new Regex(@"Cannot find module|ModuleNotFoundError", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["syntax_error"]      = new Regex(@"SyntaxError|syntax error", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["null_reference"]    = new Regex(@"NullReferenceException|null reference", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            ["timeout"]           = new Regex(@"timeout|timed out", RegexOptions.Compiled | RegexOptions.IgnoreCase)
+        };
 
     public AutomatedFixService(
         IOrchestrationClient orchestrationClient,
@@ -139,7 +140,7 @@ public class AutomatedFixService : IAutomatedFixService
                         Owner = owner,
                         Repo = repo,
                         Title = $"Automated fix for build failure",
-                        Body = $"This PR was automatically generated to fix a build failure.\n\nError: {fixAttempt.ErrorMessage}\n\nFix Attempt ID: {fixAttempt.Id}",
+                        Body = $"This PR was automatically generated to fix a build failure.\n\nError: {SanitizeForDescription(fixAttempt.ErrorMessage, 500)}\n\nFix Attempt ID: {fixAttempt.Id}",
                         Head = branchName,
                         Base = fixAttempt.BuildFailure?.Branch ?? "main",
                         IsDraft = false
@@ -175,7 +176,8 @@ public class AutomatedFixService : IAutomatedFixService
 
                     fixAttempt.Status = FixStatus.Failed;
                     fixAttempt.CompletedAt = DateTime.UtcNow;
-                    fixAttempt.FailureReason = $"Failed to create PR: {ex.Message}";
+                    // Avoid leaking sensitive info; store exception type only
+                    fixAttempt.FailureReason = $"Failed to create PR: {ex.GetType().Name}";
                     await _fixAttemptRepository.UpdateAsync(fixAttempt, cancellationToken);
                 }
             }
@@ -200,16 +202,16 @@ public class AutomatedFixService : IAutomatedFixService
 
     public bool ShouldAttemptFix(string errorMessage)
     {
-        return ErrorPatterns.Values.Any(pattern => Regex.IsMatch(errorMessage, pattern, RegexOptions.IgnoreCase));
+        return ErrorPatterns.Values.Any(regex => regex.IsMatch(errorMessage));
     }
 
     public string? ExtractErrorPattern(string errorMessage)
     {
-        foreach (var (patternName, regex) in ErrorPatterns)
+        foreach (var kvp in ErrorPatterns)
         {
-            if (Regex.IsMatch(errorMessage, regex, RegexOptions.IgnoreCase))
+            if (kvp.Value.IsMatch(errorMessage))
             {
-                return patternName;
+                return kvp.Key;
             }
         }
 
@@ -218,6 +220,9 @@ public class AutomatedFixService : IAutomatedFixService
 
     private static string CreateFixDescription(BuildFailure buildFailure)
     {
+        var sanitizedMessage = SanitizeForDescription(buildFailure.ErrorMessage, 1000);
+        var logSnippet = SanitizeForDescription(buildFailure.ErrorLog, 4000);
+
         return $@"Fix build error in {buildFailure.Repository}
 
 **Branch**: {buildFailure.Branch}
@@ -226,15 +231,29 @@ public class AutomatedFixService : IAutomatedFixService
 **Job**: {buildFailure.JobName ?? "N/A"}
 
 **Error Message**:
-{buildFailure.ErrorMessage}
+{sanitizedMessage}
 
-{(string.IsNullOrEmpty(buildFailure.ErrorLog) ? "" : $@"
-**Build Log**:
+{(string.IsNullOrEmpty(logSnippet) ? string.Empty : $@"
+**Build Log (truncated)**:
 ```
-{buildFailure.ErrorLog}
+{logSnippet}
 ```")}
 
 Please analyze the error and provide a fix for this build failure.";
+    }
+
+    private static string SanitizeForDescription(string? input, int maxLength)
+    {
+        if (string.IsNullOrEmpty(input)) return string.Empty;
+        // Remove control characters, normalize newlines, and avoid Markdown code fence confusion
+        var cleaned = input.Replace("\r", string.Empty);
+        cleaned = Regex.Replace(cleaned, "[\\u0000-\\u001F]", string.Empty);
+        cleaned = cleaned.Replace("```", "'''");
+        if (cleaned.Length > maxLength)
+        {
+            cleaned = cleaned.Substring(0, maxLength) + "…";
+        }
+        return cleaned;
     }
 
     private static (string owner, string repo) ParseRepository(string repository)
