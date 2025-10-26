@@ -45,33 +45,60 @@ public class FixAttemptRepository : IFixAttemptRepository
 
     public async Task<FixStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
     {
-        var attempts = await _context.FixAttempts.ToListAsync(cancellationToken);
+        var aggregated = await _context.FixAttempts
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Total = g.Count(),
+                Succeeded = g.Sum(fa => fa.Status == FixStatus.Succeeded ? 1 : 0),
+                Failed = g.Sum(fa => fa.Status == FixStatus.Failed ? 1 : 0),
+                InProgress = g.Sum(fa => fa.Status == FixStatus.InProgress ? 1 : 0)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (aggregated is null)
+        {
+            return new FixStatistics
+            {
+                TotalAttempts = 0,
+                Succeeded = 0,
+                Failed = 0,
+                InProgress = 0
+            };
+        }
 
         return new FixStatistics
         {
-            TotalAttempts = attempts.Count,
-            Succeeded = attempts.Count(fa => fa.Status == FixStatus.Succeeded),
-            Failed = attempts.Count(fa => fa.Status == FixStatus.Failed),
-            InProgress = attempts.Count(fa => fa.Status == FixStatus.InProgress)
+            TotalAttempts = aggregated.Total,
+            Succeeded = aggregated.Succeeded,
+            Failed = aggregated.Failed,
+            InProgress = aggregated.InProgress
         };
     }
 
     public async Task<Dictionary<string, FixStatistics>> GetStatisticsByErrorPatternAsync(CancellationToken cancellationToken = default)
     {
-        var attempts = await _context.FixAttempts
+        var aggregated = await _context.FixAttempts
             .Where(fa => fa.ErrorPattern != null)
+            .GroupBy(fa => fa.ErrorPattern!)
+            .Select(g => new
+            {
+                Key = g.Key,
+                Total = g.Count(),
+                Succeeded = g.Sum(fa => fa.Status == FixStatus.Succeeded ? 1 : 0),
+                Failed = g.Sum(fa => fa.Status == FixStatus.Failed ? 1 : 0),
+                InProgress = g.Sum(fa => fa.Status == FixStatus.InProgress ? 1 : 0)
+            })
             .ToListAsync(cancellationToken);
 
-        return attempts
-            .GroupBy(fa => fa.ErrorPattern!)
-            .ToDictionary(
-                g => g.Key,
-                g => new FixStatistics
-                {
-                    TotalAttempts = g.Count(),
-                    Succeeded = g.Count(fa => fa.Status == FixStatus.Succeeded),
-                    Failed = g.Count(fa => fa.Status == FixStatus.Failed),
-                    InProgress = g.Count(fa => fa.Status == FixStatus.InProgress)
-                });
+        return aggregated.ToDictionary(
+            x => x.Key,
+            x => new FixStatistics
+            {
+                TotalAttempts = x.Total,
+                Succeeded = x.Succeeded,
+                Failed = x.Failed,
+                InProgress = x.InProgress
+            });
     }
 }
