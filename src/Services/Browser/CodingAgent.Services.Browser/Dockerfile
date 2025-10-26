@@ -4,12 +4,20 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILDKIT_INLINE_CACHE=1
 WORKDIR /src
 
+# Copy solution-level files that may affect restore
+COPY global.json ./
+COPY Directory.Build.props ./
+
+# Copy SharedKernel
+COPY src/SharedKernel/CodingAgent.SharedKernel/CodingAgent.SharedKernel.csproj src/SharedKernel/CodingAgent.SharedKernel/
+
 # Copy project file and restore dependencies
 COPY src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj src/Services/Browser/CodingAgent.Services.Browser/
 RUN --mount=type=cache,id=nuget-cache,sharing=locked,target=/root/.nuget/packages \
     dotnet restore src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj --force --no-cache
 
-# Copy source code and build
+# Copy everything and build
+COPY src/SharedKernel/CodingAgent.SharedKernel/ src/SharedKernel/CodingAgent.SharedKernel/
 COPY src/Services/Browser/CodingAgent.Services.Browser/ src/Services/Browser/CodingAgent.Services.Browser/
 WORKDIR /src/src/Services/Browser/CodingAgent.Services.Browser
 RUN --mount=type=cache,id=nuget-cache,sharing=locked,target=/root/.nuget/packages \
