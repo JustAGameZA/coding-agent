@@ -24,20 +24,10 @@ public class TaskCompletedEventConsumer : IConsumer<TaskCompletedEvent>
             "[CICDMonitor] Consumed TaskCompletedEvent: TaskId={TaskId}, Success={Success}, CostUsd={CostUsd}, Duration={Duration}",
             e.TaskId, e.Success, e.CostUsd, e.Duration);
 
-        try
-        {
-            // Process task completion to update fix attempt and potentially create PR
-            await _automatedFixService.ProcessTaskCompletionAsync(
-                e.TaskId,
-                e.Success,
-                context.CancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "[CICDMonitor] Failed to process TaskCompletedEvent for TaskId={TaskId}",
-                e.TaskId);
-            // Don't rethrow - we don't want to retry this event
-        }
+        // Process task completion to update fix attempt and potentially create PR
+        await _automatedFixService.ProcessTaskCompletionAsync(
+            e.TaskId,
+            e.Success,
+            context.CancellationToken);
     }
 }
