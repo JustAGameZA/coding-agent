@@ -3,11 +3,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace CodingAgent.Services.CICDMonitor.Migrations
+namespace CodingAgent.Services.CICDMonitor.Migrations;
+
+/// <inheritdoc />
+public partial class InitialCreate : Migration
 {
-    /// <inheritdoc />
-    public partial class InitialCreate : Migration
-    {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -48,11 +48,10 @@ namespace CodingAgent.Services.CICDMonitor.Migrations
                 unique: true);
         }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(
-                name: "Builds");
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(
+            name: "Builds");
     }
 }

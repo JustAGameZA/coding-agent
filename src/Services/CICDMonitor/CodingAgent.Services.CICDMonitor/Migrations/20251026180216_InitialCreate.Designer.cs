@@ -9,8 +9,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace CodingAgent.Services.CICDMonitor.Migrations
-{
+namespace CodingAgent.Services.CICDMonitor.Migrations;
+
     [DbContext(typeof(CICDMonitorDbContext))]
     [Migration("20251026180216_InitialCreate")]
     partial class InitialCreate
@@ -100,4 +100,3 @@ namespace CodingAgent.Services.CICDMonitor.Migrations
 #pragma warning restore 612, 618
         }
     }
-}
