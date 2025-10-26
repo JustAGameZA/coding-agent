@@ -50,7 +50,7 @@ jobs:
       - name: Install Playwright browsers
         run: |
           dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Debug
-          pwsh src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.ps1 install --with-deps
+          pwsh -File src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.ps1 install --with-deps
 
       - name: Test (Unit only)
         run: >-
