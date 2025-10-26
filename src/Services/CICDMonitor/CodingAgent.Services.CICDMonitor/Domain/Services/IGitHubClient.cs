@@ -9,6 +9,11 @@ public interface IGitHubClient
     /// Creates a pull request in the GitHub service.
     /// </summary>
     Task<CreatePullRequestResponse> CreatePullRequestAsync(CreatePullRequestRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets repository metadata (includes DefaultBranch).
+    /// </summary>
+    Task<RepositoryInfo> GetRepositoryAsync(string owner, string repo, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -86,4 +91,14 @@ public record CreatePullRequestResponse
     /// Repository name.
     /// </summary>
     public required string RepositoryName { get; init; }
+}
+
+/// <summary>
+/// Minimal repository metadata required by CICD Monitor.
+/// </summary>
+public record RepositoryInfo
+{
+    public required string Owner { get; init; }
+    public required string Name { get; init; }
+    public required string DefaultBranch { get; init; }
 }
