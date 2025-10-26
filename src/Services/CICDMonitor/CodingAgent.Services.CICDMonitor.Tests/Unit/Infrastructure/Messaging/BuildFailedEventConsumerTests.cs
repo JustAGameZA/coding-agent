@@ -30,12 +30,18 @@ public class BuildFailedEventConsumerTests
         var buildFailedEvent = new BuildFailedEvent
         {
             BuildId = Guid.NewGuid(),
-            Repository = "owner/repo",
+            Owner = "owner",
+            Repository = "repo",
             Branch = "main",
             CommitSha = "abc123",
+            WorkflowRunId = 12345,
+            WorkflowName = "CI",
+            ErrorMessages = new List<string> { "error CS1234: compilation failed" },
+            Conclusion = "failure",
+            WorkflowUrl = "https://github.com/owner/repo/actions/runs/12345",
+            FailedAt = DateTime.UtcNow,
             ErrorMessage = "error CS1234: compilation failed",
             ErrorLog = "Full build log here",
-            WorkflowName = "CI",
             JobName = "build"
         };
 
@@ -66,7 +72,7 @@ public class BuildFailedEventConsumerTests
         await _automatedFixService.Received(1).ProcessBuildFailureAsync(
             Arg.Is<BuildFailure>(bf =>
                 bf.Id == buildFailedEvent.BuildId &&
-                bf.Repository == buildFailedEvent.Repository &&
+                bf.Repository == $"{buildFailedEvent.Owner}/{buildFailedEvent.Repository}" &&
                 bf.Branch == buildFailedEvent.Branch &&
                 bf.CommitSha == buildFailedEvent.CommitSha &&
                 bf.ErrorMessage == buildFailedEvent.ErrorMessage &&
@@ -83,9 +89,16 @@ public class BuildFailedEventConsumerTests
         var buildFailedEvent = new BuildFailedEvent
         {
             BuildId = Guid.NewGuid(),
-            Repository = "owner/repo",
+            Owner = "owner",
+            Repository = "repo",
             Branch = "main",
             CommitSha = "abc123",
+            WorkflowRunId = 67890,
+            WorkflowName = "CI",
+            ErrorMessages = new List<string> { "error CS1234: compilation failed" },
+            Conclusion = "failure",
+            WorkflowUrl = "https://github.com/owner/repo/actions/runs/67890",
+            FailedAt = DateTime.UtcNow,
             ErrorMessage = "error CS1234: compilation failed"
         };
 
@@ -123,9 +136,16 @@ public class BuildFailedEventConsumerTests
         var buildFailedEvent = new BuildFailedEvent
         {
             BuildId = Guid.NewGuid(),
-            Repository = "owner/repo",
+            Owner = "owner",
+            Repository = "repo",
             Branch = "main",
             CommitSha = "abc123",
+            WorkflowRunId = 11111,
+            WorkflowName = "CI",
+            ErrorMessages = new List<string> { "Unknown error" },
+            Conclusion = "failure",
+            WorkflowUrl = "https://github.com/owner/repo/actions/runs/11111",
+            FailedAt = DateTime.UtcNow,
             ErrorMessage = "Unknown error"
         };
 
@@ -151,9 +171,16 @@ public class BuildFailedEventConsumerTests
         var buildFailedEvent = new BuildFailedEvent
         {
             BuildId = Guid.NewGuid(),
-            Repository = "owner/repo",
+            Owner = "owner",
+            Repository = "repo",
             Branch = "main",
             CommitSha = "abc123",
+            WorkflowRunId = 22222,
+            WorkflowName = "CI",
+            ErrorMessages = new List<string> { "error CS1234" },
+            Conclusion = "failure",
+            WorkflowUrl = "https://github.com/owner/repo/actions/runs/22222",
+            FailedAt = DateTime.UtcNow,
             ErrorMessage = "error CS1234"
         };
 

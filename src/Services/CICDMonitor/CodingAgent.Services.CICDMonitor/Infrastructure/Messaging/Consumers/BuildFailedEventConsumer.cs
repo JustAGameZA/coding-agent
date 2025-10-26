@@ -25,24 +25,34 @@ public class BuildFailedEventConsumer : IConsumer<BuildFailedEvent>
     {
         var e = context.Message;
 
+        var repoId = !string.IsNullOrWhiteSpace(e.Owner) ? $"{e.Owner}/{e.Repository}" : e.Repository;
+
         _logger.LogInformation(
             "[CICDMonitor] Consumed BuildFailedEvent: BuildId={BuildId}, Repository={Repository}, Branch={Branch}",
-            e.BuildId, e.Repository, e.Branch);
+            e.BuildId, repoId, e.Branch);
 
         try
         {
             // Create BuildFailure entity from event
+            var errorMessage = !string.IsNullOrWhiteSpace(e.ErrorMessage)
+                ? e.ErrorMessage!
+                : (e.ErrorMessages != null && e.ErrorMessages.Count > 0
+                    ? string.Join("; ", e.ErrorMessages)
+                    : "Build failed");
+
+            var failedAt = e.FailedAt != default ? e.FailedAt : e.OccurredAt;
+
             var buildFailure = new BuildFailure
             {
                 Id = e.BuildId,
-                Repository = e.Repository,
+                Repository = repoId,
                 Branch = e.Branch,
                 CommitSha = e.CommitSha,
-                ErrorMessage = e.ErrorMessage,
+                ErrorMessage = errorMessage,
                 ErrorLog = e.ErrorLog,
                 WorkflowName = e.WorkflowName,
                 JobName = e.JobName,
-                FailedAt = e.OccurredAt
+                FailedAt = failedAt
             };
 
             // Process the build failure and attempt automated fix

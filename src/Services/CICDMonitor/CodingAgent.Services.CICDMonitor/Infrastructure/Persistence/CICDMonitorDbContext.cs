@@ -1,5 +1,6 @@
 using CodingAgent.Services.CICDMonitor.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
 
@@ -8,11 +9,14 @@ namespace CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
 /// </summary>
 public class CICDMonitorDbContext : DbContext
 {
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions();
+
     public CICDMonitorDbContext(DbContextOptions<CICDMonitorDbContext> options)
         : base(options)
     {
     }
 
+    public DbSet<Build> Builds => Set<Build>();
     public DbSet<BuildFailure> BuildFailures => Set<BuildFailure>();
     public DbSet<FixAttempt> FixAttempts => Set<FixAttempt>();
 
@@ -22,6 +26,51 @@ public class CICDMonitorDbContext : DbContext
 
         // Set schema for all tables in this context
         modelBuilder.HasDefaultSchema("cicd_monitor");
+
+        // Configure Build entity
+        modelBuilder.Entity<Build>(entity =>
+        {
+            entity.HasKey(b => b.Id);
+
+            entity.HasIndex(b => b.WorkflowRunId)
+                .IsUnique();
+
+            entity.HasIndex(b => new { b.Owner, b.Repository, b.CreatedAt });
+
+            entity.Property(b => b.Owner)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(b => b.Repository)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            entity.Property(b => b.Branch)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(b => b.CommitSha)
+                .IsRequired()
+                .HasMaxLength(40);
+
+            entity.Property(b => b.WorkflowName)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(b => b.Conclusion)
+                .HasMaxLength(50);
+
+            entity.Property(b => b.WorkflowUrl)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            // Persist error messages as JSON (jsonb) for robustness
+            entity.Property(b => b.ErrorMessages)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, JsonOptions),
+                    v => JsonSerializer.Deserialize<List<string>>(v, JsonOptions) ?? new List<string>())
+                .HasColumnType("jsonb");
+        });
 
         // Configure BuildFailure entity
         modelBuilder.Entity<BuildFailure>(entity =>

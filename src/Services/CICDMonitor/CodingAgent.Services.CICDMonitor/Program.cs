@@ -1,8 +1,10 @@
 using CodingAgent.Services.CICDMonitor.Api.Endpoints;
+using CodingAgent.Services.CICDMonitor.Application.Services;
 using CodingAgent.Services.CICDMonitor.Domain.Repositories;
 using CodingAgent.Services.CICDMonitor.Domain.Services;
 using CodingAgent.Services.CICDMonitor.Domain.Services.Implementation;
 using CodingAgent.Services.CICDMonitor.Infrastructure.ExternalServices;
+using CodingAgent.Services.CICDMonitor.Infrastructure.GitHub;
 using CodingAgent.Services.CICDMonitor.Infrastructure.Messaging.Consumers;
 using CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
 using CodingAgent.SharedKernel.Abstractions;
@@ -10,47 +12,17 @@ using CodingAgent.SharedKernel.Infrastructure;
 using CodingAgent.SharedKernel.Infrastructure.Messaging;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Octokit;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Database
-builder.Services.AddDbContext<CICDMonitorDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("CICDMonitorDb")));
-
-// Add repositories
-builder.Services.AddScoped<IBuildFailureRepository, BuildFailureRepository>();
-builder.Services.AddScoped<IFixAttemptRepository, FixAttemptRepository>();
-
-// Add domain services
-builder.Services.AddScoped<IAutomatedFixService, AutomatedFixService>();
-
-// Add HTTP clients for external services
-builder.Services.AddHttpClient<IOrchestrationClient, OrchestrationClient>(client =>
-{
-    var orchestrationUrl = builder.Configuration["ExternalServices:Orchestration:BaseUrl"] 
-        ?? "http://orchestration-service:5003";
-    client.BaseAddress = new Uri(orchestrationUrl);
-});
-
-builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
-{
-    var githubUrl = builder.Configuration["ExternalServices:GitHub:BaseUrl"] 
-        ?? "http://github-service:5004";
-    client.BaseAddress = new Uri(githubUrl);
-});
-
-// Add event publisher
-if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Docker")
-{
-    builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
-}
-else
-{
-    builder.Services.AddScoped<IEventPublisher, NoOpEventPublisher>();
-}
+// Add ActivitySource for tracing
+var activitySource = new ActivitySource("CodingAgent.Services.CICDMonitor");
+builder.Services.AddSingleton(activitySource);
 
 // Add OpenTelemetry
 builder.Services.AddOpenTelemetry()
@@ -61,6 +33,7 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
+        .AddSource("CodingAgent.Services.CICDMonitor")
         .AddOtlpExporter(options =>
         {
             var otlpEndpoint = builder.Configuration["OpenTelemetry:Endpoint"];
@@ -74,10 +47,72 @@ builder.Services.AddOpenTelemetry()
         .AddHttpClientInstrumentation()
         .AddPrometheusExporter());
 
+// Database - PostgreSQL
+builder.Services.AddDbContext<CICDMonitorDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("CICDMonitorDb");
+    if (!string.IsNullOrEmpty(connectionString))
+    {
+        options.UseNpgsql(connectionString);
+    }
+});
+
+// Octokit GitHub Client (used by BuildMonitor)
+builder.Services.AddSingleton<Octokit.IGitHubClient>(sp =>
+{
+    var githubToken = builder.Configuration["GitHub:Token"];
+    var client = new Octokit.GitHubClient(new ProductHeaderValue("CodingAgent-CICDMonitor"));
+    
+    if (!string.IsNullOrEmpty(githubToken))
+    {
+        client.Credentials = new Credentials(githubToken);
+    }
+    
+    return client;
+});
+
+// Repositories
+builder.Services.AddScoped<IBuildRepository, BuildRepository>();
+builder.Services.AddScoped<IBuildFailureRepository, BuildFailureRepository>();
+builder.Services.AddScoped<IFixAttemptRepository, FixAttemptRepository>();
+
+// Domain services
+builder.Services.AddScoped<IAutomatedFixService, AutomatedFixService>();
+
+// HTTP clients for external services
+builder.Services.AddHttpClient<CodingAgent.Services.CICDMonitor.Domain.Services.IOrchestrationClient, OrchestrationClient>(client =>
+{
+    var orchestrationUrl = builder.Configuration["ExternalServices:Orchestration:BaseUrl"] 
+        ?? "http://orchestration-service:5003";
+    client.BaseAddress = new Uri(orchestrationUrl);
+});
+
+builder.Services.AddHttpClient<CodingAgent.Services.CICDMonitor.Domain.Services.IGitHubClient, CodingAgent.Services.CICDMonitor.Infrastructure.ExternalServices.GitHubClient>(client =>
+{
+    var githubUrl = builder.Configuration["ExternalServices:GitHub:BaseUrl"] 
+        ?? "http://github-service:5004";
+    client.BaseAddress = new Uri(githubUrl);
+});
+
+// Event publisher abstraction
+if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Docker")
+{
+    builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+}
+else
+{
+    builder.Services.AddScoped<IEventPublisher, NoOpEventPublisher>();
+}
+
+// Services
+builder.Services.AddSingleton<IGitHubActionsClient, GitHubActionsClient>();
+
+// Background Services
+builder.Services.AddHostedService<BuildMonitor>();
+
 // MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {
-    // Add consumers
     x.AddConsumer<TaskCompletedEventConsumer>();
     x.AddConsumer<BuildFailedEventConsumer>();
 
@@ -91,7 +126,6 @@ builder.Services.AddMassTransit(x =>
 // Add health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks();
 
-// PostgreSQL health check
 var connectionString = builder.Configuration.GetConnectionString("CICDMonitorDb");
 if (!string.IsNullOrEmpty(connectionString))
 {
@@ -106,18 +140,19 @@ if (builder.Environment.IsProduction())
 
 var app = builder.Build();
 
-// Run migrations automatically in development
-if (app.Environment.IsDevelopment())
+// Optionally run migrations in development when explicitly enabled
+var runMigrations = app.Configuration.GetValue<bool?>("RunMigrationsOnStartup") ?? false;
+if (app.Environment.IsDevelopment() && runMigrations)
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<CICDMonitorDbContext>();
     await dbContext.Database.MigrateAsync();
 }
-
 // Map health endpoint
 app.MapHealthChecks("/health");
 
 // Map API endpoints
+app.MapBuildEndpoints();
 app.MapFixStatisticsEndpoints();
 
 // Map ping endpoint
