@@ -1,6 +1,10 @@
 using CodingAgent.Services.GitHub.Api.Endpoints;
 using CodingAgent.Services.GitHub.Domain.Services;
 using CodingAgent.Services.GitHub.Infrastructure;
+using CodingAgent.SharedKernel.Abstractions;
+using CodingAgent.SharedKernel.Infrastructure;
+using CodingAgent.SharedKernel.Infrastructure.Messaging;
+using MassTransit;
 using Octokit;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -22,8 +26,22 @@ builder.Services.AddSingleton<IGitHubClient>(sp =>
     return client;
 });
 
-// Register GitHub Service
+// Register GitHub Services
 builder.Services.AddScoped<IGitHubService, GitHubService>();
+builder.Services.AddScoped<IWebhookService, WebhookService>();
+
+// Configure MassTransit with RabbitMQ
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.ConfigureRabbitMQHost(builder.Configuration, builder.Environment);
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+// Register Event Publisher
+builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
 
 // Health checks
 builder.Services.AddHealthChecks();
@@ -54,6 +72,9 @@ app.MapRepositoryEndpoints();
 
 // Map branch endpoints
 app.MapBranchEndpoints();
+
+// Map webhook endpoints
+app.MapWebhookEndpoints();
 
 // Map ping endpoint
 app.MapGet("/ping", () => Results.Ok(new
