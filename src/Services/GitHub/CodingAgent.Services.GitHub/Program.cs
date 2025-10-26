@@ -1,3 +1,6 @@
+using CodingAgent.Services.GitHub.Api.Endpoints;
+using CodingAgent.Services.GitHub.Domain.Services;
+using CodingAgent.Services.GitHub.Infrastructure;
 using Octokit;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -18,6 +21,9 @@ builder.Services.AddSingleton<IGitHubClient>(sp =>
     }
     return client;
 });
+
+// Register GitHub Service
+builder.Services.AddScoped<IGitHubService, GitHubService>();
 
 // Health checks
 builder.Services.AddHealthChecks();
@@ -43,6 +49,12 @@ var app = builder.Build();
 // Map health endpoint
 app.MapHealthChecks("/health");
 
+// Map repository endpoints
+app.MapRepositoryEndpoints();
+
+// Map branch endpoints
+app.MapBranchEndpoints();
+
 // Map ping endpoint
 app.MapGet("/ping", () => Results.Ok(new
 {
@@ -58,3 +70,6 @@ app.MapGet("/ping", () => Results.Ok(new
 app.MapPrometheusScrapingEndpoint();
 
 app.Run();
+
+// Make Program accessible for testing
+public partial class Program { }

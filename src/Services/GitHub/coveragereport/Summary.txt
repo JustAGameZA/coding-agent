@@ -1,0 +1,33 @@
+Summary
+  Generated on: 10/26/2025 - 16:05:53
+  Coverage date: 10/26/2025 - 16:05:32
+  Parser: Cobertura
+  Assemblies: 1
+  Classes: 11
+  Files: 6
+  Line coverage: 33.1%
+  Covered lines: 135
+  Uncovered lines: 272
+  Coverable lines: 407
+  Total lines: 723
+  Branch coverage: 50% (8 of 16)
+  Covered branches: 8
+  Total branches: 16
+  Method coverage: 18.8% (10 of 53)
+  Full method coverage: 5.6% (3 of 53)
+  Covered methods: 10
+  Fully covered methods: 3
+  Total methods: 53
+
+CodingAgent.Services.GitHub                                           33.1%
+  CodingAgent.Services.GitHub.Api.Endpoints.BranchEndpoints           30.6%
+  CodingAgent.Services.GitHub.Api.Endpoints.BranchResponse               0%
+  CodingAgent.Services.GitHub.Api.Endpoints.CreateBranchRequest          0%
+  CodingAgent.Services.GitHub.Api.Endpoints.CreateRepositoryRequest      0%
+  CodingAgent.Services.GitHub.Api.Endpoints.RepositoryEndpoints         20%
+  CodingAgent.Services.GitHub.Api.Endpoints.RepositoryResponse           0%
+  CodingAgent.Services.GitHub.Api.Endpoints.UpdateRepositoryRequest      0%
+  CodingAgent.Services.GitHub.Domain.Entities.Branch                     0%
+  CodingAgent.Services.GitHub.Domain.Entities.Repository                 0%
+  CodingAgent.Services.GitHub.Infrastructure.GitHubService            36.7%
+  Program                                                             83.3%
