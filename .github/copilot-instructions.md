@@ -1202,6 +1202,10 @@ These concise prompts are designed to work with Copilot Chat (and other assistan
 - Prompt: `otel: wire <service>`
 - Behavior: add tracing + metrics (AspNetCore, HttpClient, EF) and Prometheus exporter per examples in this file.
 
+#### Mode: gemini (external assistant profile)
+- Prompt: `gemini: <task>`
+- Behavior: respond with a self‑contained prompt pack tailored for Gemini 2.5 Pro, referencing `.github/chatmodes/gemini-mode.md` as the system profile. Include only the minimal task-specific additions the user should paste under “User” while the system prompt comes from that file.
+
 ---
 
 ### One‑liners you can paste in chat
@@ -1214,6 +1218,7 @@ These concise prompts are designed to work with Copilot Chat (and other assistan
 - `scaffold: service GitHub`
 - `endpoint: chat POST /conversations`
 - `docs: update testing verbosity guidance`
+- `gemini: summarize failing CI for PR 167 and propose minimal patch`
 
 > Note: Model selection (e.g., Gemini vs GPT) is controlled by the provider. These prompts are model‑agnostic and tuned for this repository.
 
