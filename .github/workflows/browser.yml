@@ -56,8 +56,14 @@ jobs:
           fi
           # Build the Browser service to get playwright.ps1
           dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Release --no-restore
-          # Install Playwright browsers
-          pwsh src/Services/Browser/CodingAgent.Services.Browser/bin/Release/playwright.ps1 install chromium firefox --with-deps
+          # Find and install Playwright browsers
+          PLAYWRIGHT_SCRIPT=$(find src/Services/Browser -name "playwright.ps1" -path "*/bin/Release/*" | head -n 1)
+          if [ -z "$PLAYWRIGHT_SCRIPT" ]; then
+            echo "Error: playwright.ps1 not found"
+            exit 1
+          fi
+          echo "Using Playwright script: $PLAYWRIGHT_SCRIPT"
+          pwsh "$PLAYWRIGHT_SCRIPT" install chromium firefox --with-deps
 
       - name: Test (Unit)
         run: dotnet test CodingAgent.sln -c Release --no-build --filter "Category=Unit" --logger "trx;LogFileName=unit_test_results.trx"

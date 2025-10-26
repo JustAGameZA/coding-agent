@@ -35,7 +35,7 @@ fi
 
 # Install browsers using PowerShell script
 echo "🌐 Installing Chromium and Firefox browsers..."
-pwsh "$PLAYWRIGHT_SCRIPT" install chromium firefox
+pwsh "$PLAYWRIGHT_SCRIPT" install chromium firefox --with-deps
 
 if [ $? -eq 0 ]; then
     echo "✅ Playwright browsers installed successfully!"
