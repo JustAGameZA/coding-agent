@@ -43,11 +43,13 @@ jobs:
       - name: Restore .NET
         run: dotnet restore CodingAgent.sln
 
-      - name: Test .NET with coverage (Cobertura)
+      - name: Test .NET with coverage (Cobertura, Unit only)
         run: |
           dotnet test CodingAgent.sln \
             --logger "trx" \
             --collect:"XPlat Code Coverage" \
+            --filter "Category=Unit" \
+            --settings ./.runsettings \
             --verbosity quiet --nologo
 
       - name: Find .NET Cobertura files

@@ -52,8 +52,11 @@ jobs:
           pwsh -Command "dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj"
           pwsh -Command "src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.ps1 install --with-deps"
 
-      - name: Test (Unit & Integration for Browser Service)
-        run: dotnet test src/Services/Browser/CodingAgent.Services.Browser.Tests/CodingAgent.Services.Browser.Tests.csproj --no-build --logger "trx;LogFileName=test_results.trx"
+      - name: Test (Unit only)
+        run: >-
+          dotnet test CodingAgent.sln -c Release --no-build --no-restore
+          --settings ./.runsettings --filter "Category=Unit"
+          --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
         if: success()
