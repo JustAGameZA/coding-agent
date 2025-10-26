@@ -1,0 +1,13 @@
+# Act configuration for local workflow testing
+# This file configures act to use appropriate container images
+
+# Use runner images that include Node.js, .NET, and other tools
+-P ubuntu-latest=ghcr.io/catthehacker/ubuntu:runner-latest
+-P ubuntu-22.04=ghcr.io/catthehacker/ubuntu:runner-22.04
+
+# Architecture
+--container-architecture linux/amd64
+
+# Environment variables to skip unnecessary operations
+--env DOTNET_SKIP_FIRST_TIME_EXPERIENCE=true
+--env DOTNET_CLI_TELEMETRY_OPTOUT=true
