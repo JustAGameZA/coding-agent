@@ -1,5 +1,6 @@
 using CodingAgent.Services.Ollama.Domain.Services;
 using CodingAgent.Services.Ollama.Infrastructure.Http;
+using CodingAgent.Services.Ollama.Infrastructure.CloudApi;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -14,8 +15,14 @@ builder.Services.AddHttpClient<IOllamaHttpClient, OllamaHttpClient>(client =>
     client.Timeout = TimeSpan.FromMinutes(5); // Allow long-running inference
 });
 
+// Cloud API Configuration
+builder.Services.Configure<CloudApiOptions>(
+    builder.Configuration.GetSection(CloudApiOptions.SectionName));
+
 // Domain Services
 builder.Services.AddScoped<IHardwareDetector, HardwareDetector>();
+builder.Services.AddSingleton<ITokenUsageTracker, InMemoryTokenUsageTracker>();
+builder.Services.AddSingleton<ICloudApiClient, MockCloudApiClient>();
 
 // OpenTelemetry
 builder.Services.AddOpenTelemetry()
@@ -40,6 +47,23 @@ builder.Services.AddHealthChecks()
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
+
+// Validate Cloud API configuration on startup
+using (var scope = app.Services.CreateScope())
+{
+    var cloudApiClient = scope.ServiceProvider.GetRequiredService<ICloudApiClient>();
+    var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger("Startup");
+
+    if (cloudApiClient.IsConfigured())
+    {
+        logger.LogInformation("Cloud API is configured and will be used as fallback");
+    }
+    else
+    {
+        logger.LogInformation("Cloud API not configured - only Ollama backend will be used");
+    }
+}
 
 // Configure the HTTP request pipeline
 app.UseHttpsRedirection();
