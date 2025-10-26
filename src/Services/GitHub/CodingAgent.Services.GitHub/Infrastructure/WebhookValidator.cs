@@ -34,7 +34,7 @@ public class WebhookValidator
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_secret));
         var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        var computedSignature = "sha256=" + BitConverter.ToString(computedHash).Replace("-", "").ToLower();
+        var computedSignature = "sha256=" + Convert.ToHexString(computedHash).ToLower();
 
         return signature.Equals(computedSignature, StringComparison.OrdinalIgnoreCase);
     }

@@ -32,7 +32,7 @@ public class PushWebhookPayload : GitHubWebhookPayload
     {
         if (Ref.StartsWith("refs/heads/"))
         {
-            return Ref.Substring("refs/heads/".Length);
+            return Ref[11..];
         }
         return Ref;
     }

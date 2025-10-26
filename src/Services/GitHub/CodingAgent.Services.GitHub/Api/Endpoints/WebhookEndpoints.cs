@@ -69,7 +69,13 @@ public static class WebhookEndpoints
 
         // Get webhook event type and delivery ID
         var eventType = context.Request.Headers["X-GitHub-Event"].FirstOrDefault();
-        var deliveryId = context.Request.Headers["X-GitHub-Delivery"].FirstOrDefault() ?? Guid.NewGuid().ToString();
+        var deliveryId = context.Request.Headers["X-GitHub-Delivery"].FirstOrDefault();
+        
+        if (string.IsNullOrEmpty(deliveryId))
+        {
+            deliveryId = Guid.NewGuid().ToString();
+            logger.LogWarning("Webhook request missing X-GitHub-Delivery header, generated fallback ID: {DeliveryId}", deliveryId);
+        }
 
         activity?.SetTag("webhook.event_type", eventType);
         activity?.SetTag("webhook.delivery_id", deliveryId);

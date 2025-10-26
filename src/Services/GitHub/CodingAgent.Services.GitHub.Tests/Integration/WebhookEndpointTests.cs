@@ -282,6 +282,6 @@ public class WebhookEndpointTests : IClassFixture<WebApplicationFactory<Program>
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        return "sha256=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
+        return "sha256=" + Convert.ToHexString(hash).ToLower();
     }
 }

@@ -19,7 +19,7 @@ public class WebhookValidatorTests
         // Calculate actual signature
         using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(TestSecret));
         var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(TestPayload));
-        var actualSignature = "sha256=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
+        var actualSignature = "sha256=" + Convert.ToHexString(hash).ToLower();
 
         // Act
         var result = validator.ValidateSignature(TestPayload, actualSignature);
@@ -92,7 +92,7 @@ public class WebhookValidatorTests
         // Generate signature with validator1
         using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(TestSecret));
         var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(TestPayload));
-        var signature = "sha256=" + BitConverter.ToString(hash).Replace("-", "").ToLower();
+        var signature = "sha256=" + Convert.ToHexString(hash).ToLower();
 
         // Act - validate with validator2 (different secret)
         var result = validator2.ValidateSignature(TestPayload, signature);
