@@ -70,6 +70,97 @@ You are an expert coding agent for the repository “coding-agent” (monorepo).
 
 ---
 
+## Debug GitHub Actions (step-by-step)
+
+Use these steps when a PR/job fails. If logs aren’t accessible to the assistant, ask for the last 100 lines of the failing step with timestamps.
+
+1) Summarize failing jobs
+- Prompt: `ci: fix pr <number>`
+- Expected behavior: list failing jobs, first actionable error, minimal patch proposal, and a conventional commit message.
+
+2) If logs are missing
+- Ask the user to paste the last ~100 lines of the failing step (with timestamps). Focus on the first error, not all subsequent cascade failures.
+
+3) Common CI fixes for this repo
+- Ensure .NET tests run with quiet output to avoid timeouts/freezes:
+  - `dotnet test --settings .runsettings --no-build --verbosity quiet --nologo`
+- For coverage jobs, add quiet flags to `dotnet test` commands in workflow YAMLs.
+- When build breaks on analyzers/feeds, verify `nuget.config` sources and `Directory.Build.props` central versions; prefer minimal changes.
+
+4) Patch guidance
+- Prefer surgical changes to `.github/workflows/*.yml` or docs. Include a short rationale and links to `docs/` when relevant.
+- Validate by re‑running only the impacted job or by showing the exact commands to run locally.
+
+---
+
+## Build & Debug locally
+
+### .NET solution
+- Build all:
+```pwsh
+dotnet build CodingAgent.sln --no-restore
+```
+- Build a service:
+```pwsh
+dotnet build src/Services/Chat/CodingAgent.Services.Chat.sln --no-restore
+```
+
+### Python ML Classifier
+- From `src/Services/MLClassifier/ml_classifier_service`:
+```pwsh
+pip install -r requirements.txt
+pytest -q --maxfail=1 --disable-warnings
+uvicorn main:app --reload --port 8001
+```
+
+### Angular Dashboard
+- From `src/Frontend/coding-agent-dashboard`:
+```pwsh
+npm ci
+npm run start
+```
+
+### Debug tips
+- Prefer minimal, isolated repros. If a service fails, run only that service’s build/tests.
+- Use quiet test output to prevent editor freezes (`--verbosity quiet --nologo`).
+- Capture first and last 20–30 lines of errors for diagnosis.
+
+---
+
+## Run Tests (quiet and filtered)
+
+### All .NET tests with runsettings
+```pwsh
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo
+```
+
+### Unit only
+```pwsh
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Unit"
+```
+
+### Integration only (Testcontainers)
+```pwsh
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Integration"
+```
+
+### Service‑specific tests
+```pwsh
+dotnet test path\to\Service.Tests.csproj --verbosity quiet --nologo
+```
+
+### Python tests (ML Classifier)
+```pwsh
+pytest -q --maxfail=1 --disable-warnings
+```
+
+### Coverage (example)
+```pwsh
+dotnet test CodingAgent.sln --collect:"XPlat Code Coverage" --verbosity quiet --nologo
+```
+
+---
+
 ## Notes
 - Model choice is provider‑controlled; these prompts are model‑agnostic and tuned to this repo.
 - If a step requires external logs (e.g., GitHub Actions), request the last ~100 lines with timestamps.
