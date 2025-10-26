@@ -135,6 +135,22 @@ public class AutomatedFixService : IAutomatedFixService
                     var (owner, repo) = ParseRepository(fixAttempt.Repository);
                     var branchName = $"automated-fix/{fixAttempt.Id}";
 
+                    // Determine base branch: prefer failing build branch, otherwise use repository default
+                    var baseBranch = fixAttempt.BuildFailure?.Branch;
+                    if (string.IsNullOrWhiteSpace(baseBranch))
+                    {
+                        try
+                        {
+                            var repoInfo = await _githubClient.GetRepositoryAsync(owner, repo, cancellationToken);
+                            baseBranch = string.IsNullOrWhiteSpace(repoInfo.DefaultBranch) ? "main" : repoInfo.DefaultBranch;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Falling back to 'main' as base branch for {Owner}/{Repo}", owner, repo);
+                            baseBranch = "main";
+                        }
+                    }
+
                     var prRequest = new CreatePullRequestRequest
                     {
                         Owner = owner,
@@ -142,7 +158,7 @@ public class AutomatedFixService : IAutomatedFixService
                         Title = $"Automated fix for build failure",
                         Body = $"This PR was automatically generated to fix a build failure.\n\nError: {SanitizeForDescription(fixAttempt.ErrorMessage, 500)}\n\nFix Attempt ID: {fixAttempt.Id}",
                         Head = branchName,
-                        Base = fixAttempt.BuildFailure?.Branch ?? "main",
+                        Base = baseBranch!,
                         IsDraft = false
                     };
 
