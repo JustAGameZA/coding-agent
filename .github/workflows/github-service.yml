@@ -47,8 +47,11 @@ jobs:
       - name: Build
         run: dotnet build CodingAgent.sln -c Release --no-restore
 
-      - name: Test
-        run: dotnet test CodingAgent.sln -c Release --no-build --logger "trx;LogFileName=test_results.trx"
+      - name: Test (Unit only)
+        run: >-
+          dotnet test CodingAgent.sln -c Release --no-build --no-restore
+          --settings ./.runsettings --filter "Category=Unit"
+          --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
         run: |
