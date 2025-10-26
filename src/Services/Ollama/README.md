@@ -8,6 +8,9 @@ The Ollama Service provides cost-effective, on-premise LLM inference using local
 - **Hardware-Aware Model Selection**: Recommends appropriate models based on available resources
 - **Dynamic Model Registry**: Discovers models from Ollama backend (no hardcoded lists)
 - **Ollama REST API Integration**: Wrapper around Ollama HTTP API
+- **Cloud API Fallback** (Optional): Fallback to cloud APIs when local backend unavailable
+- **Token Usage Tracking**: Monthly token limits for cloud API usage
+- **Integration Tests**: Comprehensive test suite with Testcontainers
 
 ## Architecture
 
@@ -94,6 +97,12 @@ Returns hardware profile and recommended models:
   },
   "OpenTelemetry": {
     "Endpoint": "http://localhost:4317"
+  },
+  "CloudApi": {
+    "Provider": "none",
+    "ApiKey": "",
+    "Endpoint": "",
+    "MonthlyTokenLimit": 100000
   }
 }
 ```
@@ -101,6 +110,41 @@ Returns hardware profile and recommended models:
 ### Environment Variables
 - `Ollama__BaseUrl`: Ollama backend URL (default: http://localhost:11434)
 - `OpenTelemetry__Endpoint`: OTLP endpoint for traces (default: http://localhost:4317)
+- `CloudApi__Provider`: Cloud API provider (e.g., "openai", "anthropic", "none")
+- `CloudApi__ApiKey`: API key for cloud provider (optional)
+- `CloudApi__MonthlyTokenLimit`: Monthly token usage limit (default: 100,000)
+
+## Cloud API Fallback
+
+The Ollama Service supports optional cloud API fallback when the local Ollama backend is unavailable. This is **disabled by default** and requires explicit configuration.
+
+### Configuration
+
+To enable cloud API fallback:
+
+```json
+{
+  "CloudApi": {
+    "Provider": "openai",
+    "ApiKey": "sk-your-api-key-here",
+    "MonthlyTokenLimit": 100000
+  }
+}
+```
+
+### Token Usage Tracking
+
+- Token usage is tracked per month per provider
+- Monthly limits prevent overuse of paid cloud APIs
+- When limit is reached, fallback is disabled
+- Usage resets at the start of each month
+
+### Safety Features
+
+- **Opt-in only**: Cloud API is not configured by default
+- **Token limits**: Prevents unexpected costs from runaway usage
+- **Configuration validation**: Service logs whether cloud API is configured on startup
+- **Safe fallback**: If not configured, service only uses local Ollama backend
 
 ## Docker Deployment
 
@@ -138,8 +182,14 @@ dotnet build
 
 ### Run Tests
 ```bash
-# Unit tests only
+# Unit tests only (fast, < 1 second)
 dotnet test --filter "Category=Unit"
+
+# Integration tests only (with Testcontainers)
+dotnet test --filter "Category=Integration"
+
+# All tests
+dotnet test
 
 # With coverage
 dotnet test --collect:"XPlat Code Coverage"
@@ -152,11 +202,24 @@ dotnet run --project src/Services/Ollama/CodingAgent.Services.Ollama
 
 ## Testing
 
-Unit tests achieve **85%+ coverage** focusing on:
-- Hardware detection logic
-- Model recommendations based on hardware tiers
-- Hardware profile calculations
-- Error handling and fallback scenarios
+The test suite includes **57 tests** with **85%+ coverage**:
+
+### Unit Tests (47 tests)
+- **Hardware Detection** (19 tests): GPU detection, hardware tiers, model recommendations
+- **OllamaHttpClient** (10 tests): API interactions, error handling, token calculation
+- **Cloud API Client** (8 tests): Configuration validation, token availability checks
+- **Token Usage Tracker** (10 tests): Usage tracking, monthly limits, multi-provider isolation
+
+### Integration Tests (10 tests)
+- **Service Endpoints**: Root, health check, hardware detection
+- **Cloud API Fallback**: Configuration validation, token tracking, fallback logic
+- **Testcontainers**: Uses Ollama container for realistic testing (when Docker available)
+
+Tests follow patterns from other services:
+- `[Trait("Category", "Unit")]` for fast unit tests
+- `[Trait("Category", "Integration")]` for integration tests
+- Testcontainers for consistent test environment
+- Mock implementations for cloud API (real implementations can be plugged in)
 
 See `CodingAgent.Services.Ollama.Tests` for test implementation.
 
