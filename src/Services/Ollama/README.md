@@ -183,16 +183,16 @@ dotnet build
 ### Run Tests
 ```bash
 # Unit tests only (fast, < 1 second)
-dotnet test --filter "Category=Unit"
+dotnet test --filter "Category=Unit" --verbosity quiet --nologo
 
 # Integration tests only (with Testcontainers)
-dotnet test --filter "Category=Integration"
+dotnet test --filter "Category=Integration" --verbosity quiet --nologo
 
 # All tests
-dotnet test
+dotnet test --verbosity quiet --nologo
 
 # With coverage
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test --collect:"XPlat Code Coverage" --verbosity quiet --nologo
 ```
 
 ### Run Locally
