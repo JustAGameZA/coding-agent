@@ -1206,6 +1206,14 @@ These concise prompts are designed to work with Copilot Chat (and other assistan
 - Prompt: `gemini: <task>`
 - Behavior: respond with a self‑contained prompt pack tailored for Gemini 2.5 Pro, referencing `.github/chatmodes/gemini-mode.md` as the system profile. Include only the minimal task-specific additions the user should paste under “User” while the system prompt comes from that file.
 
+#### Mode: pr-review
+- Prompt: `pr: review <number>`
+- Behavior: perform a completeness review against repo rules: scope/surgical diffs, build/test status (quiet), validation/observability present, docs updated, Conventional Commits, and produce a concise review summary with 1–3 high‑impact line comments per file.
+
+#### Mode: pr-address-comments
+- Prompt: `pr: address-comments <number>`
+- Behavior: classify comments (bug/test/security/perf/style/docs/arch), validate using repo rubric, then propose or produce minimal code/test/doc patches; provide fixup commit message(s) and rerun quiet tests.
+
 ---
 
 ### One‑liners you can paste in chat
@@ -1219,6 +1227,8 @@ These concise prompts are designed to work with Copilot Chat (and other assistan
 - `endpoint: chat POST /conversations`
 - `docs: update testing verbosity guidance`
 - `gemini: summarize failing CI for PR 167 and propose minimal patch`
+- `pr: review 167`
+- `pr: address-comments 167`
 
 > Note: Model selection (e.g., Gemini vs GPT) is controlled by the provider. These prompts are model‑agnostic and tuned for this repository.
 

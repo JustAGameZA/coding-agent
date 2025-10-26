@@ -45,6 +45,8 @@ You are an expert coding agent for the repository “coding-agent” (monorepo).
 - `docs: update <area>` → Edit only relevant docs, cross‑link ADRs, add changelog note.
 - `otel: wire <service>` → Add tracing and metrics (AspNetCore, HttpClient, EF) and Prometheus exporter per examples.
  - `issue: implement <id|"title">` → Plan and implement an issue end‑to‑end with tests first, minimal diffs, observability, docs, and a PR description.
+ - `pr: review <number>` → Perform a completeness review (scope, tests, docs, security, observability) and produce a concise review summary + line comments.
+ - `pr: address-comments <number>` → Classify PR review comments, validate each, propose/produce minimal patches, and update tests/docs accordingly.
 
 5) Quality gates
 - Build PASS, Lint/Typecheck PASS, Tests PASS. If failing, iterate ≤3 targeted fixes; otherwise summarize root cause and next steps.
@@ -205,6 +207,70 @@ dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filt
 ### Output expectations
 - Present: actions taken, files changed (with one‑line purpose), how to run, and notes/risks.
 - Include diffs for only the touched regions; keep noise low.
+
+---
+
+## PR Review — playbook
+
+Use this to review a PR for completeness and quality, then to assess review comments for validity and address them.
+
+### Short commands
+- `pr: review 167`
+- `pr: address-comments 167`
+
+### A) Completeness review
+1) Gather context
+  - List changed files and the PR description; identify the owning service(s).
+  - Check commit messages follow Conventional Commits; verify issue linkage if referenced.
+
+2) Quality gates
+  - Build the impacted solution(s):
+```pwsh
+dotnet build CodingAgent.sln --no-restore
+```
+  - Run tests (quiet):
+```pwsh
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo
+```
+  - If failing, isolate to unit/integration filters and summarize first actionable error with a minimal fix.
+
+3) Scope & correctness
+  - Ensure edits are surgical and within service boundaries (see docs/03-SOLUTION-STRUCTURE.md).
+  - Confirm new/changed endpoints include validation (FluentValidation) and observability (OpenTelemetry spans, Prometheus metrics if applicable).
+  - Check that docs are updated when APIs or behavior change.
+
+4) Output
+  - Provide: summary, risks, missing items, and actionable checklist.
+  - Include up to 3 precise line comments (or suggestions) per file for high‑impact issues.
+
+### B) Address review comments
+1) Classify each comment
+  - Types: bug, test gap, performance, security, style/nit, docs, architecture.
+  - Validity rubric:
+    - True defect/edge case → valid.
+    - Test missing for new behavior → valid.
+    - Style contradicts repo rules → invalid unless STYLEGUIDE.md supports it.
+    - Scope creep / unrelated refactor → usually invalid; propose separate PR.
+
+2) Act on valid comments
+  - Add/adjust tests first (unit/integration as appropriate).
+  - Apply the smallest code change that resolves the concern.
+  - Add/adjust OpenTelemetry/metrics if the change affects critical paths.
+
+3) Verify
+```pwsh
+dotnet build CodingAgent.sln --no-restore
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Unit"
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Integration"
+```
+
+4) Communicate
+  - Post a concise reply per comment: what changed and why; include links to tests.
+  - Use a Conventional Commit in the fixup commit (e.g., `fix(chat): handle null userId in ConversationEndpoints`).
+
+### Output expectations
+- Concise review summary with checklists for missing tests/docs/observability.
+- Minimal diffs for fixes; tests demonstrating the regression/edge case.
 
 ---
 
