@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodingAgent.Services.GitHub", "CodingAgent.Services.GitHub\CodingAgent.Services.GitHub.csproj", "{0D79755B-BED9-4D77-9009-8A85B12A50AB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodingAgent.Services.GitHub.Tests", "CodingAgent.Services.GitHub.Tests\CodingAgent.Services.GitHub.Tests.csproj", "{C729FCCA-FD6F-4841-9A73-A2CC960594FD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,18 @@ Global
 		{0D79755B-BED9-4D77-9009-8A85B12A50AB}.Release|x64.Build.0 = Release|Any CPU
 		{0D79755B-BED9-4D77-9009-8A85B12A50AB}.Release|x86.ActiveCfg = Release|Any CPU
 		{0D79755B-BED9-4D77-9009-8A85B12A50AB}.Release|x86.Build.0 = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|x64.Build.0 = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Debug|x86.Build.0 = Debug|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|x64.ActiveCfg = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|x64.Build.0 = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|x86.ActiveCfg = Release|Any CPU
+		{C729FCCA-FD6F-4841-9A73-A2CC960594FD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
