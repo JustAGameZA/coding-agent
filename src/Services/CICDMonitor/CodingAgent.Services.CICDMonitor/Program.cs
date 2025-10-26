@@ -105,8 +105,9 @@ if (builder.Environment.IsProduction())
 
 var app = builder.Build();
 
-// Run migrations in development
-if (app.Environment.IsDevelopment())
+// Optionally run migrations in development when explicitly enabled
+var runMigrations = app.Configuration.GetValue<bool?>("RunMigrationsOnStartup") ?? false;
+if (app.Environment.IsDevelopment() && runMigrations)
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<CICDMonitorDbContext>();
