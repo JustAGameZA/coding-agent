@@ -49,8 +49,8 @@ jobs:
 
       - name: Install Playwright browsers
         run: |
-          pwsh -Command "dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj"
-          pwsh -Command "src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.ps1 install --with-deps"
+          dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj
+          ./src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.sh install --with-deps
 
       - name: Test (Unit & Integration for Browser Service)
         run: dotnet test src/Services/Browser/CodingAgent.Services.Browser.Tests/CodingAgent.Services.Browser.Tests.csproj --no-build --logger "trx;LogFileName=test_results.trx"
