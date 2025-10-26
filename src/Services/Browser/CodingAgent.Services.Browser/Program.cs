@@ -1,3 +1,9 @@
+using CodingAgent.Services.Browser.Api.Endpoints;
+using CodingAgent.Services.Browser.Api.Validators;
+using CodingAgent.Services.Browser.Domain.Configuration;
+using CodingAgent.Services.Browser.Domain.Services;
+using CodingAgent.Services.Browser.Infrastructure.Browser;
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -6,6 +12,17 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configuration
+builder.Services.Configure<BrowserOptions>(
+    builder.Configuration.GetSection(BrowserOptions.SectionName));
+
+// Browser services
+builder.Services.AddSingleton<IBrowserPool, BrowserPool>();
+builder.Services.AddScoped<IBrowserService, PlaywrightBrowserService>();
+
+// Validation
+builder.Services.AddValidatorsFromAssemblyContaining<BrowseRequestValidator>();
 
 // Health checks
 builder.Services.AddHealthChecks();
@@ -17,6 +34,7 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
+        .AddSource("BrowserService")
         .AddOtlpExporter(options =>
         {
             var endpoint = builder.Configuration["OpenTelemetry:Endpoint"] ?? "http://jaeger:4317";
@@ -43,6 +61,9 @@ app.MapGet("/ping", () => Results.Ok(new
 .WithName("Ping")
 .WithTags("Health")
 .Produces(StatusCodes.Status200OK);
+
+// Browser endpoints
+app.MapBrowserEndpoints();
 
 // Prometheus metrics endpoint
 app.MapPrometheusScrapingEndpoint();
