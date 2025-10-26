@@ -200,7 +200,7 @@ Generates a PDF from a web page.
 - `printBackground` (optional): Print background graphics (default: true)
 - `timeoutMs` (optional): Timeout in milliseconds
 
-**Note:** PDF generation only works with Chromium browser.
+**Note:** PDF generation only works with Chromium browser. The service automatically uses Chromium regardless of any browserType setting in other operations.
 
 ---
 
@@ -252,6 +252,7 @@ curl -X POST http://localhost:5000/browse/interact \
 ### Example 4: Generating PDF Reports
 
 ```bash
+# Generate PDF and save the base64 data
 curl -X POST http://localhost:5000/browse/pdf \
   -H "Content-Type: application/json" \
   -d '{
@@ -260,8 +261,10 @@ curl -X POST http://localhost:5000/browse/pdf \
     "marginTop": "20mm",
     "marginBottom": "20mm",
     "printBackground": true
-  }' > report.pdf
+  }' | jq -r '.pdfData' | base64 -d > report.pdf
 ```
+
+**Note:** The response contains base64-encoded PDF data in the `pdfData` field. Use `jq` to extract it and `base64 -d` to decode it to a binary PDF file.
 
 ---
 
