@@ -25,6 +25,7 @@
     <PackageReference Include="MassTransit" Version="8.3.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.10" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="3.0.0" />
     <PackageReference Include="Testcontainers.RabbitMq" Version="3.0.0" />
   </ItemGroup>
