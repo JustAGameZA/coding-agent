@@ -24,7 +24,7 @@ RUN --mount=type=cache,id=nuget-cache,sharing=locked,target=/root/.nuget/package
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
-# Install Playwright dependencies for Chromium
+# Install Playwright dependencies for Chromium and Firefox
 RUN apt-get update && apt-get install -y \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
+    libxss1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy published app
