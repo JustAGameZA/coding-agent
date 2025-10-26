@@ -5,12 +5,15 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Threading;
 
 namespace CodingAgent.Services.CICDMonitor.Tests.Unit.Infrastructure;
 
 [Trait("Category", "Unit")]
 public class BuildRepositoryTests
 {
+    private static long _workflowRunIdSeed = DateTime.UtcNow.Ticks;
+
     private readonly CICDMonitorDbContext _context;
     private readonly Mock<ILogger<BuildRepository>> _mockLogger;
     private readonly BuildRepository _sut;
@@ -218,12 +221,14 @@ public class BuildRepositoryTests
     private Build CreateTestBuild(
         string owner = "test-owner",
         string repository = "test-repo",
-        long workflowRunId = 12345)
+        long workflowRunId = 0)
     {
+        var id = workflowRunId != 0 ? workflowRunId : Interlocked.Increment(ref _workflowRunIdSeed);
+
         return new Build
         {
             Id = Guid.NewGuid(),
-            WorkflowRunId = workflowRunId,
+            WorkflowRunId = id,
             Owner = owner,
             Repository = repository,
             Branch = "main",
@@ -231,7 +236,7 @@ public class BuildRepositoryTests
             WorkflowName = "CI",
             Status = BuildStatus.Success,
             Conclusion = "success",
-            WorkflowUrl = "https://github.com/test/repo/actions/runs/12345",
+            WorkflowUrl = $"https://github.com/{owner}/{repository}/actions/runs/{id}",
             ErrorMessages = new List<string>(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
