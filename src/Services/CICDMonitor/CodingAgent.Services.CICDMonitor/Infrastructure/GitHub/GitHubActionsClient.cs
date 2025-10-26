@@ -1,7 +1,6 @@
 using CodingAgent.Services.CICDMonitor.Domain.Entities;
 using CodingAgent.Services.CICDMonitor.Domain.ValueObjects;
 using Octokit;
-using System.Text.RegularExpressions;
 
 namespace CodingAgent.Services.CICDMonitor.Infrastructure.GitHub;
 
@@ -12,7 +11,10 @@ public class GitHubActionsClient : IGitHubActionsClient
 {
     private readonly IGitHubClient _client;
     private readonly ILogger<GitHubActionsClient> _logger;
-    private readonly SemaphoreSlim _rateLimiter;
+
+    // Rate limiting: allow ~1 request/second without holding async locks during the wait
+    private readonly object _rateLimitLock = new();
+    private DateTime _nextAllowedUtc = DateTime.MinValue;
 
     public GitHubActionsClient(
         IGitHubClient client,
@@ -20,7 +22,6 @@ public class GitHubActionsClient : IGitHubActionsClient
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _rateLimiter = new SemaphoreSlim(1, 1); // 1 request per second rate limiting
     }
 
     /// <inheritdoc/>
@@ -133,19 +134,29 @@ public class GitHubActionsClient : IGitHubActionsClient
     }
 
     /// <summary>
-    /// Applies rate limiting to ensure we don't exceed 1 request per second.
+    /// Applies rate limiting (~1 request/sec). If the previous request was within the last second,
+    /// waits only for the remaining time, without blocking other callers on a semaphore.
     /// </summary>
-    private async Task ApplyRateLimitAsync(CancellationToken cancellationToken)
+    private Task ApplyRateLimitAsync(CancellationToken cancellationToken)
     {
-        await _rateLimiter.WaitAsync(cancellationToken);
-        try
+        TimeSpan delay = TimeSpan.Zero;
+        lock (_rateLimitLock)
         {
-            await Task.Delay(1000, cancellationToken); // 1 second delay
+            var now = DateTime.UtcNow;
+            if (now < _nextAllowedUtc)
+            {
+                delay = _nextAllowedUtc - now;
+                _nextAllowedUtc = _nextAllowedUtc + TimeSpan.FromSeconds(1);
+            }
+            else
+            {
+                _nextAllowedUtc = now + TimeSpan.FromSeconds(1);
+            }
         }
-        finally
-        {
-            _rateLimiter.Release();
-        }
+
+        return delay > TimeSpan.Zero
+            ? Task.Delay(delay, cancellationToken)
+            : Task.CompletedTask;
     }
 
     /// <summary>
@@ -170,7 +181,7 @@ public class GitHubActionsClient : IGitHubActionsClient
             CreatedAt = workflowRun.CreatedAt.UtcDateTime,
             UpdatedAt = workflowRun.UpdatedAt.UtcDateTime,
             StartedAt = workflowRun.RunStartedAt.UtcDateTime,
-            CompletedAt = null, // Note: WorkflowRun doesn't have CompletedAt in Octokit 13
+            CompletedAt = null, // Octokit v13 has no CompletedAt; see BuildFailedEvent fallback
             ErrorMessages = new List<string>()
         };
     }
