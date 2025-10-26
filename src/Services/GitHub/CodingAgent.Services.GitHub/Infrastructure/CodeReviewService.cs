@@ -13,7 +13,6 @@ public class CodeReviewService : ICodeReviewService
     private readonly ILogger<CodeReviewService> _logger;
 
     // Thresholds for code review
-    private const int MaxFileSizeBytes = 500 * 1024; // 500KB
     private const int MaxFilesChanged = 50;
     private const int MaxLinesChanged = 1000;
 
