@@ -1145,6 +1145,78 @@ class HeuristicClassifier:
 - "Write integration tests using Testcontainers for the GitHub service PR creation flow."
 - "Set up YARP gateway routing to Chat and Orchestration services per `03-SOLUTION-STRUCTURE.md`."
 
+### Chat modes & short commands (LLM‑agnostic)
+
+These concise prompts are designed to work with Copilot Chat (and other assistants) without a long preamble. They follow the guardrails in this file: minimal diffs, ≤5 files at once, tests first, and quiet test output.
+
+#### General rules for the assistant (apply to all modes)
+- Prefer repo facts from `docs/` and this file over assumptions.
+- Never change unrelated files. Keep edits surgical and explain rationale in-line.
+- For tests: use `dotnet test --settings .runsettings --no-build --verbosity quiet --nologo` and filter when possible.
+- If a log/secret is required and not accessible, explicitly ask me to paste the last 100 lines with timestamps.
+
+#### Mode: repo-help (Q&A about this monorepo)
+- Prompt: "repo: help <topic>"
+- Behavior: cite sections/anchors from `docs/*.md` and `.github/copilot-instructions.md`. Include the exact file paths for any referenced artifacts.
+- Example: `repo: help solution structure`
+
+#### Mode: build
+- Prompt: `build: all` or `build: <service>`
+- Behavior: show the exact commands; prefer solution builds for .NET and point to service sln where applicable. Do not run with high verbosity. If errors occur, show first/last 30 lines and a concise diagnosis.
+- Examples:
+    - `build: all` → `dotnet build CodingAgent.sln --no-restore`
+    - `build: chat` → `dotnet build src/Services/Chat/CodingAgent.Services.Chat.sln --no-restore`
+
+#### Mode: test
+- Prompts:
+    - `test: unit` → run fast tests only
+    - `test: integration` → Testcontainers flows
+    - `test: service <name>` → run tests for a specific service
+- Behavior: always use quiet/nologo, show a short summary (pass/fail counts), then list only failing tests with their error message and the top stack frame. Offer the single smallest fix and required file edits.
+
+#### Mode: ci-fix (GitHub Actions)
+- Prompt: `ci: fix pr <number>`
+- Behavior: summarize failing jobs, identify the first actionable error, propose a minimal patch (docs, workflow YAML, or code) and the commit message. If logs can’t be fetched, request the failing step’s last 100 lines.
+- Example: `ci: fix pr 167`
+
+#### Mode: git-ops (safe, explicit)
+- Prompts:
+    - `git: sync master` → abort merge, fetch, hard-reset to `origin/master` (destructive; confirm first)
+    - `git: discard local` → explain and propose `git restore .` or `git reset --hard` based on status
+    - `git: commit "<msg>"` → craft Conventional Commit message and show staged file list expectation
+- Behavior: show commands and a reversible alternative when destructive.
+
+#### Mode: scaffold
+- Prompt: `scaffold: service <Name>`
+- Behavior: create the directories and starter files per `docs/03-SOLUTION-STRUCTURE.md` and the per‑service pattern (Program.cs, Domain, Application, Infrastructure, Api). Include unit test skeletons with `[Trait("Category", "Unit")]`.
+
+#### Mode: endpoint
+- Prompt: `endpoint: <service> <method> <route>`
+- Behavior: add Minimal API endpoint with FluentValidation, OpenTelemetry spans, and tests. Example: `endpoint: chat POST /conversations`
+
+#### Mode: docs
+- Prompt: `docs: update <area>`
+- Behavior: edit only the relevant doc(s), cross‑link to ADRs, and add a brief changelog note.
+
+#### Mode: observability
+- Prompt: `otel: wire <service>`
+- Behavior: add tracing + metrics (AspNetCore, HttpClient, EF) and Prometheus exporter per examples in this file.
+
+---
+
+### One‑liners you can paste in chat
+- `repo: help roadmap`
+- `build: all`
+- `test: unit`
+- `test: integration`
+- `ci: fix pr 167`
+- `git: sync master`
+- `scaffold: service GitHub`
+- `endpoint: chat POST /conversations`
+- `docs: update testing verbosity guidance`
+
+> Note: Model selection (e.g., Gemini vs GPT) is controlled by the provider. These prompts are model‑agnostic and tuned for this repository.
+
 ### Anti-Patterns (Avoid)
 - ❌ "Build the entire system" → Too broad, split into services
 - ❌ "Add error handling" → Generic, specify scenarios (network timeout, validation failure)
