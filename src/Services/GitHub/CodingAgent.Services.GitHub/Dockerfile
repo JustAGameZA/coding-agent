@@ -8,12 +8,16 @@ WORKDIR /src
 COPY global.json ./
 COPY Directory.Build.props ./
 
+# Copy SharedKernel
+COPY src/SharedKernel/CodingAgent.SharedKernel/CodingAgent.SharedKernel.csproj src/SharedKernel/CodingAgent.SharedKernel/
+
 # Copy project file and restore dependencies
 COPY src/Services/GitHub/CodingAgent.Services.GitHub/CodingAgent.Services.GitHub.csproj src/Services/GitHub/CodingAgent.Services.GitHub/
 RUN --mount=type=cache,id=nuget-cache,sharing=locked,target=/root/.nuget/packages \
 	dotnet restore src/Services/GitHub/CodingAgent.Services.GitHub/CodingAgent.Services.GitHub.csproj --force --no-cache
 
-# Copy source code and build
+# Copy everything and build
+COPY src/SharedKernel/CodingAgent.SharedKernel/ src/SharedKernel/CodingAgent.SharedKernel/
 COPY src/Services/GitHub/CodingAgent.Services.GitHub/ src/Services/GitHub/CodingAgent.Services.GitHub/
 WORKDIR /src/src/Services/GitHub/CodingAgent.Services.GitHub
 RUN --mount=type=cache,id=nuget-cache,sharing=locked,target=/root/.nuget/packages \
