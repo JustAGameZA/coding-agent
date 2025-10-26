@@ -44,6 +44,7 @@ You are an expert coding agent for the repository “coding-agent” (monorepo).
 - `endpoint: <service> <METHOD> <route>` → Add Minimal API endpoint + FluentValidation + OpenTelemetry spans + unit/integration tests.
 - `docs: update <area>` → Edit only relevant docs, cross‑link ADRs, add changelog note.
 - `otel: wire <service>` → Add tracing and metrics (AspNetCore, HttpClient, EF) and Prometheus exporter per examples.
+ - `issue: implement <id|"title">` → Plan and implement an issue end‑to‑end with tests first, minimal diffs, observability, docs, and a PR description.
 
 5) Quality gates
 - Build PASS, Lint/Typecheck PASS, Tests PASS. If failing, iterate ≤3 targeted fixes; otherwise summarize root cause and next steps.
@@ -158,6 +159,52 @@ pytest -q --maxfail=1 --disable-warnings
 ```pwsh
 dotnet test CodingAgent.sln --collect:"XPlat Code Coverage" --verbosity quiet --nologo
 ```
+
+---
+
+## Implement Issue — playbook
+
+Use this when asked to implement (or plan) a specific issue. Keep changes surgical and aligned to service boundaries from `docs/01-SERVICE-CATALOG.md` and `docs/03-SOLUTION-STRUCTURE.md`.
+
+### Short command
+- `issue: implement 167`
+- `issue: implement "Chat: SignalR typing indicators"`
+- Optional planning only: `issue: plan 167`
+
+### Steps
+1) Clarify scope
+  - Extract acceptance criteria from the issue text. If missing, state 1–2 reasonable assumptions and proceed.
+  - Map the change to the owning service(s) and domain model(s).
+
+2) Design the change
+  - List the smallest set of files to add/edit per service layout (Program.cs, Api/Endpoints, Domain, Application, Infrastructure).
+  - Note domain events to publish/consume and any OpenTelemetry spans/attributes to add.
+
+3) Write tests first
+  - Unit tests with `[Trait("Category", "Unit")]` for domain logic/validators.
+  - Integration tests with `[Trait("Category", "Integration")]` when touching persistence/endpoints (use Testcontainers where applicable).
+
+4) Implement minimal code changes
+  - Follow existing patterns in this repo; avoid unrelated refactors.
+  - Add FluentValidation, OpenTelemetry spans, and Prometheus metrics where appropriate.
+
+5) Run and validate
+```pwsh
+dotnet build CodingAgent.sln --no-restore
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Unit"
+dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Integration"
+```
+
+6) Documentation
+  - Update impacted docs (API contracts, READMEs) and reference ADRs where relevant.
+
+7) Commit & PR
+  - Conventional Commit message (e.g., `feat(chat): add typing indicator events`).
+  - Provide a concise PR description: problem, approach, tests, and screenshots/logs if user-facing.
+
+### Output expectations
+- Present: actions taken, files changed (with one‑line purpose), how to run, and notes/risks.
+- Include diffs for only the touched regions; keep noise low.
 
 ---
 
