@@ -1,6 +1,7 @@
 @CodingAgent.Services.Ollama_HostAddress = http://localhost:5293
 
-GET {{CodingAgent.Services.Ollama_HostAddress}}/weatherforecast/
+# Health check
+GET {{CodingAgent.Services.Ollama_HostAddress}}/health
 Accept: application/json
 
 ###
