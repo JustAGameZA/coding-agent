@@ -215,6 +215,35 @@ services:
       - coding-agent
 
   # ==========================================
+  # Ollama Service
+  # ==========================================
+  ollama-service:
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    container_name: coding-agent-ollama-dev
+    working_dir: /workspace/src/Services/Ollama/CodingAgent.Services.Ollama
+    command: >-
+      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5003"
+    ports:
+      - "5003:5003"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://0.0.0.0:5003"
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      Services__Ollama__BaseUrl: "http://ollama:11434"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+    volumes:
+      - ../../:/workspace
+      - nuget-packages:/root/.nuget/packages
+    depends_on:
+      - ollama
+      - rabbitmq
+    networks:
+      - coding-agent
+
+  # ==========================================
   # ML Classifier (FastAPI)
   # ==========================================
   ml-classifier:

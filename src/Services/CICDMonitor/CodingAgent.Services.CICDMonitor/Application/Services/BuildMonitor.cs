@@ -14,7 +14,6 @@ namespace CodingAgent.Services.CICDMonitor.Application.Services;
 public class BuildMonitor : BackgroundService
 {
     private readonly IGitHubActionsClient _githubClient;
-    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<BuildMonitor> _logger;
     private readonly IConfiguration _configuration;
     private readonly ActivitySource _activitySource;
@@ -22,14 +21,12 @@ public class BuildMonitor : BackgroundService
 
     public BuildMonitor(
         IGitHubActionsClient githubClient,
-        IPublishEndpoint publishEndpoint,
         ILogger<BuildMonitor> logger,
         IConfiguration configuration,
         ActivitySource activitySource,
         IServiceScopeFactory scopeFactory)
     {
         _githubClient = githubClient ?? throw new ArgumentNullException(nameof(githubClient));
-        _publishEndpoint = publishEndpoint ?? throw new ArgumentNullException(nameof(publishEndpoint));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
@@ -217,7 +214,10 @@ public class BuildMonitor : BackgroundService
             build.ErrorMessages = errorMessages.ToList();
             await repository.UpdateAsync(build, cancellationToken);
 
-            // Publish BuildFailedEvent
+            build.ErrorMessages = errorMessages.ToList();
+            await repository.UpdateAsync(build, cancellationToken);
+
+            // Publish BuildFailedEvent using a scoped IPublishEndpoint
             var buildFailedEvent = new BuildFailedEvent
             {
                 BuildId = build.Id,
@@ -233,7 +233,9 @@ public class BuildMonitor : BackgroundService
                 FailedAt = build.CompletedAt ?? DateTime.UtcNow
             };
 
-            await _publishEndpoint.Publish(buildFailedEvent, cancellationToken);
+            using var publishScope = _scopeFactory.CreateScope();
+            var publishEndpoint = publishScope.ServiceProvider.GetRequiredService<IPublishEndpoint>();
+            await publishEndpoint.Publish(buildFailedEvent, cancellationToken);
 
             _logger.LogInformation(
                 "Published BuildFailedEvent for build {BuildId} with {ErrorCount} error messages",

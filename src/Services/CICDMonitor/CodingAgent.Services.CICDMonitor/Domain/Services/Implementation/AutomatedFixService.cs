@@ -260,7 +260,10 @@ Please analyze the error and provide a fix for this build failure.";
 
     private static string SanitizeForDescription(string? input, int maxLength)
     {
-        if (string.IsNullOrEmpty(input)) return string.Empty;
+        if (string.IsNullOrEmpty(input))
+        {
+            return string.Empty;
+        }
         // Remove control characters, normalize newlines, and avoid Markdown code fence confusion
         var cleaned = input.Replace("\r", string.Empty);
         cleaned = Regex.Replace(cleaned, "[\\u0000-\\u001F]", string.Empty);

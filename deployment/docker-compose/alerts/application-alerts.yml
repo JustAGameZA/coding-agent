@@ -1,0 +1,290 @@
+# ============================================
+# Application-Level Alert Rules
+# Coding Agent - Microservices Platform
+# ============================================
+# These rules monitor application-specific metrics including task execution,
+# SignalR connections, GitHub operations, and browser automation.
+
+groups:
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # ==========================================
+      # Task Execution Failure Rate High
+      # ==========================================
+      - alert: TaskExecutionFailureRateHigh
+        expr: |
+          (
+            rate(task_execution_failed_total[10m])
+            /
+            rate(task_execution_total[10m])
+          ) > 0.10
+        for: 10m
+        labels:
+          severity: critical
+          component: orchestration
+          category: reliability
+        annotations:
+          summary: "High task execution failure rate"
+          description: "{{ $value | humanizePercentage }} of task executions are failing (threshold: 10%)"
+          impact: "Users experiencing high failure rate for coding tasks"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/task-execution-failures.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Task Execution Latency High
+      # ==========================================
+      - alert: TaskExecutionLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, strategy) (
+              rate(task_execution_duration_seconds_bucket[5m])
+            )
+          ) > 30
+        for: 10m
+        labels:
+          severity: warning
+          component: orchestration
+          category: performance
+        annotations:
+          summary: "High task execution latency for {{ $labels.strategy }} strategy"
+          description: "p95 execution time is {{ $value | humanizeDuration }} (threshold: 30s)"
+          impact: "Users experiencing slow task completions"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/task-execution-slow.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Task Queue Backlog
+      # ==========================================
+      - alert: TaskQueueBacklog
+        expr: |
+          task_queue_pending_count > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: orchestration
+          category: capacity
+        annotations:
+          summary: "High task queue backlog"
+          description: "{{ $value | humanize }} tasks pending execution (threshold: 50)"
+          impact: "Tasks experiencing increased wait time before execution"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/task-queue-backlog.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # SignalR Connection Failures
+      # ==========================================
+      - alert: SignalRConnectionFailures
+        expr: |
+          rate(signalr_connection_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: chat
+          category: availability
+        annotations:
+          summary: "SignalR experiencing connection failures"
+          description: "{{ $value | humanize }} connection failures per second (threshold: 10/s)"
+          impact: "Real-time chat functionality degraded for users"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/signalr-connection-failures.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # SignalR Active Connections High
+      # ==========================================
+      - alert: SignalRActiveConnectionsHigh
+        expr: |
+          signalr_active_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: chat
+          category: capacity
+        annotations:
+          summary: "High number of active SignalR connections"
+          description: "{{ $value | humanize }} active connections (threshold: 1000)"
+          impact: "May need horizontal scaling to handle load"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/signalr-connections-high.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Message Delivery Failures
+      # ==========================================
+      - alert: MessageDeliveryFailures
+        expr: |
+          rate(chat_message_delivery_failed_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          component: chat
+          category: reliability
+        annotations:
+          summary: "Chat message delivery failures detected"
+          description: "{{ $value | humanize }} message delivery failures per second (threshold: 5/s)"
+          impact: "Users not receiving messages, communication disrupted"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/message-delivery-failures.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # GitHub API Rate Limit Approaching
+      # ==========================================
+      - alert: GitHubAPIRateLimitHigh
+        expr: |
+          (
+            github_api_remaining_requests
+            /
+            github_api_request_limit
+          ) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          component: github
+          category: capacity
+        annotations:
+          summary: "GitHub API rate limit approaching"
+          description: "Only {{ $value | humanize }}% of rate limit remaining (threshold: 20%)"
+          impact: "GitHub operations may be throttled or blocked soon"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/github-rate-limit.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # GitHub Operations Failing
+      # ==========================================
+      - alert: GitHubOperationFailureRate
+        expr: |
+          (
+            rate(github_operation_failed_total[10m])
+            /
+            rate(github_operation_total[10m])
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          component: github
+          category: reliability
+        annotations:
+          summary: "High GitHub operation failure rate"
+          description: "{{ $value | humanizePercentage }} of GitHub operations failing (threshold: 5%)"
+          impact: "Repository operations (PR creation, commits) are failing"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/github-operations-failing.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # PR Creation Latency High
+      # ==========================================
+      - alert: PRCreationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(github_pr_creation_duration_seconds_bucket[5m])
+            )
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: github
+          category: performance
+        annotations:
+          summary: "High latency for PR creation"
+          description: "p95 PR creation time is {{ $value | humanizeDuration }} (threshold: 10s)"
+          impact: "Slow PR creation affecting automated fix workflow"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/pr-creation-slow.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Browser Automation Failures
+      # ==========================================
+      - alert: BrowserAutomationFailureRate
+        expr: |
+          (
+            rate(browser_automation_failed_total[10m])
+            /
+            rate(browser_automation_total[10m])
+          ) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+          component: browser
+          category: reliability
+        annotations:
+          summary: "High browser automation failure rate"
+          description: "{{ $value | humanizePercentage }} of browser automations failing (threshold: 10%)"
+          impact: "Web scraping and browser tests are failing"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/browser-automation-failures.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Browser Timeout Rate High
+      # ==========================================
+      - alert: BrowserTimeoutRateHigh
+        expr: |
+          rate(browser_timeout_total[10m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: browser
+          category: performance
+        annotations:
+          summary: "High rate of browser timeouts"
+          description: "{{ $value | humanize }} browser timeouts per second (threshold: 1/s)"
+          impact: "Browser automations timing out, may need timeout adjustment"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/browser-timeouts.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # CI/CD Build Monitoring Lag
+      # ==========================================
+      - alert: CICDBuildMonitoringLag
+        expr: |
+          (time() - cicd_last_build_check_timestamp_seconds) > 600
+        for: 5m
+        labels:
+          severity: warning
+          component: cicd-monitor
+          category: monitoring
+        annotations:
+          summary: "CI/CD build monitoring is lagging"
+          description: "Last build check was {{ $value | humanizeDuration }} ago (threshold: 10m)"
+          impact: "Build failures may not be detected promptly"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/cicd-monitoring-lag.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Automated Fix Success Rate Low
+      # ==========================================
+      - alert: AutomatedFixSuccessRateLow
+        expr: |
+          (
+            rate(cicd_fix_success_total[1h])
+            /
+            rate(cicd_fix_attempted_total[1h])
+          ) < 0.30
+        for: 30m
+        labels:
+          severity: info
+          component: cicd-monitor
+          category: quality
+        annotations:
+          summary: "Low automated fix success rate"
+          description: "Only {{ $value | humanizePercentage }} of automated fixes successful (threshold: 30%)"
+          impact: "Fix generation quality may need improvement"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/automated-fix-success-low.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"
+
+      # ==========================================
+      # Conversation Timeout Rate
+      # ==========================================
+      - alert: ConversationTimeoutRateHigh
+        expr: |
+          rate(conversation_timeout_total[10m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: chat
+          category: experience
+        annotations:
+          summary: "High rate of conversation timeouts"
+          description: "{{ $value | humanize }} conversations timing out per second (threshold: 0.5/s)"
+          impact: "Users experiencing unresponsive chat sessions"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/conversation-timeouts.md"
+          dashboard_url: "http://localhost:3000/d/backend-services/backend-services"

@@ -81,6 +81,13 @@ Comprehensive documentation is available in the [`docs/`](./docs) directory:
 - **[🧠 ML & Orchestration ADR](./docs/04-ML-AND-ORCHESTRATION-ADR.md)** - ML architecture decisions
 - **[⚡ Quick Start](./docs/QUICK-START.md)** - Quick reference guide
 
+### Deployment & Operations
+- **[🐳 Docker Guide](./deployment/docker-compose/README.md)** - Complete Docker setup (dev + prod)
+- **[⚡ Docker Quick Start](./deployment/docker-compose/DOCKER-QUICK-START.md)** - Common commands
+- **[📦 Docker Implementation](./deployment/docker-compose/DOCKER-IMPLEMENTATION-SUMMARY.md)** - Technical details
+- **[🚨 Alerting Setup](./deployment/docker-compose/ALERTING-SUMMARY.md)** - Monitoring & alerts
+- **[📖 Runbooks](./docs/runbooks/)** - Operational procedures
+
 ### API Documentation
 - API specifications will be available in `docs/api/` (Phase 1)
 - OpenAPI/Swagger endpoints for each service
@@ -107,29 +114,59 @@ Comprehensive documentation is available in the [`docs/`](./docs) directory:
 
 ```bash
 # Clone the repository
-git clone https://github.com/zerith-jag/coding-agent.git
+git clone https://github.com/JustAGameZA/coding-agent.git
 cd coding-agent
-
-# Setup will be available in Phase 0 (Week 2)
-# Stay tuned for docker-compose.yml and setup scripts
 ```
+
+### Run with Docker (Recommended)
+
+**Development Mode** (with hot reload):
+```bash
+cd deployment/docker-compose
+
+# Start infrastructure + all services
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml up
+
+# Access services:
+# - Gateway API: http://localhost:5000
+# - Angular UI: http://localhost:4200
+# - Grafana: http://localhost:3000 (admin/admin)
+# - Jaeger: http://localhost:16686
+```
+
+**Production Mode** (optimized builds):
+```bash
+cd deployment/docker-compose
+
+# Build and start all services
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml up --build -d
+
+# Check status
+docker compose ps
+```
+
+**Documentation:**
+- 📚 [Complete Docker Guide](./deployment/docker-compose/README.md)
+- ⚡ [Quick Start Commands](./deployment/docker-compose/DOCKER-QUICK-START.md)
+- 🛠️ [Implementation Details](./deployment/docker-compose/DOCKER-IMPLEMENTATION-SUMMARY.md)
 
 ### Development Roadmap
 
-**Current Status**: ✅ Architecture Design Complete
-**Next Phase**: Phase 0 - POC Implementation (Week 2)
+**Current Status**: ✅ Phase 3 Complete (Integration Services)
+**Current Phase**: Phase 4 - Frontend & Dashboard (Starting)
 
 | Phase | Timeline | Status |
 |-------|----------|--------|
-| Phase 0: POC | Weeks 1-2 | ⏳ In Progress |
-| Phase 1: Infrastructure | Weeks 3-6 | 📋 Planned |
-| Phase 2: Core Services | Weeks 7-12 | 📋 Planned |
-| Phase 3: Integration | Weeks 13-16 | 📋 Planned |
-| Phase 4: Frontend | Weeks 17-20 | 📋 Planned |
-| Phase 5: Migration | Weeks 21-22 | 📋 Planned |
-| Phase 6: Stabilization | Weeks 23-24 | 📋 Planned |
+| Phase 0: Architecture & Planning | Weeks 1-2 | ✅ Complete |
+| Phase 1: Infrastructure & Gateway | Weeks 3-6 | ✅ Complete |
+| Phase 2: Core Services | Weeks 7-12 | ✅ Complete |
+| Phase 3: Integration Services | Weeks 13-18 | ✅ Complete |
+| Phase 4: Frontend & Dashboard | Weeks 19-22 | ⏳ In Progress |
+| Phase 5: Migration & Cutover | Weeks 23-24 | 📋 Planned |
+| Phase 6: Stabilization & Docs | Weeks 25-26 | 📋 Planned |
 
-**Target Completion**: April 2026
+**Progress**: 67% complete (4 of 6 phases done)
+**Target Completion**: May 2026
 
 ---
 
@@ -165,19 +202,39 @@ We welcome contributions! Please see our [Contributing Guide](./.github/CONTRIBU
 
 ## 📋 Project Status
 
-### ✅ Completed
-- Architecture design and documentation
-- Service specifications and API contracts
-- Implementation roadmap and milestones
-- CI/CD strategy and testing approach
-- Solution structure and monorepo layout
+### ✅ Completed (Phases 0-3)
 
-### 🚧 In Progress
-- POC: API Gateway + Chat Service
-- Initial Docker Compose setup
-- Development environment setup
+**Phase 0: Architecture & Planning**
+- ✅ Complete service catalog and specifications (78 KB documentation)
+- ✅ Solution structure with 16 projects and 8 services
+- ✅ Architecture Decision Records (ADRs)
 
-### 📋 Upcoming
+**Phase 1: Infrastructure & Gateway**
+- ✅ YARP Gateway with JWT auth and rate limiting
+- ✅ PostgreSQL + Redis + RabbitMQ + Ollama in Docker Compose
+- ✅ OpenTelemetry → Prometheus + Grafana + Jaeger observability stack
+- ✅ Automated alerting and health monitoring
+
+**Phase 2: Core Services**
+- ✅ Chat Service (141 unit tests, SignalR hub, Redis caching)
+- ✅ Orchestration Service (214 unit tests, 3 execution strategies)
+- ✅ ML Classifier Service (145 tests, hybrid heuristic+ML+LLM)
+
+**Phase 3: Integration Services**
+- ✅ GitHub Service (57 tests, PR management + webhooks)
+- ✅ Browser Service (Playwright automation)
+- ✅ CI/CD Monitor (automated fix generation)
+- ✅ Ollama Service (hardware-aware model selection)
+
+**Total Test Coverage**: 532+ unit tests across all services
+
+### 🚧 In Progress (Phase 4)
+
+- Dashboard Service (BFF) - minimal scaffold with observability
+- Angular Dashboard - basic routing + Material UI setup
+- Service integration and E2E testing
+
+### 📋 Upcoming (Phases 5-6)
 - Full infrastructure stack (Phase 1)
 - Core service implementation (Phase 2)
 - Frontend dashboard (Phase 4)

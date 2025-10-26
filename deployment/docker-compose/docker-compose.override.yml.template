@@ -1,0 +1,94 @@
+# Docker Compose Override Template
+#
+# Copy this file to docker-compose.override.yml and customize for your local environment.
+# This file is git-ignored and allows you to override settings without modifying tracked files.
+#
+# Usage:
+#   cp docker-compose.override.yml.template docker-compose.override.yml
+#   # Edit docker-compose.override.yml with your settings
+#   docker compose up  # Automatically merges with docker-compose.yml
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # Example: Override PostgreSQL password
+  # ==========================================
+  # postgres:
+  #   environment:
+  #     POSTGRES_PASSWORD: my-custom-password
+
+  # ==========================================
+  # Example: Mount local data for PostgreSQL
+  # ==========================================
+  # postgres:
+  #   volumes:
+  #     - ~/postgres-data:/var/lib/postgresql/data
+
+  # ==========================================
+  # Example: Change Grafana port
+  # ==========================================
+  # grafana:
+  #   ports:
+  #     - "3001:3000"  # Use port 3001 instead of 3000
+
+  # ==========================================
+  # Example: Enable Ollama GPU support
+  # ==========================================
+  # ollama:
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+  # ==========================================
+  # Example: Add resource limits
+  # ==========================================
+  # chat-service:
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '2'
+  #         memory: 2G
+  #       reservations:
+  #         cpus: '0.5'
+  #         memory: 512M
+
+  # ==========================================
+  # Example: Add extra environment variables
+  # ==========================================
+  # orchestration-service:
+  #   environment:
+  #     LOG_LEVEL: Debug
+  #     FEATURE_FLAG_NEW_STRATEGY: "true"
+
+  # ==========================================
+  # Example: Mount local logs directory
+  # ==========================================
+  # gateway:
+  #   volumes:
+  #     - ./logs/gateway:/app/logs
+
+  # ==========================================
+  # Example: Disable a service locally
+  # ==========================================
+  # browser-service:
+  #   profiles:
+  #     - disabled
+
+# ==========================================
+# Example: Add custom network
+# ==========================================
+# networks:
+#   custom-network:
+#     driver: bridge
+
+# ==========================================
+# Example: Add custom volume
+# ==========================================
+# volumes:
+#   custom-data:
+#     driver: local

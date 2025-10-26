@@ -1,0 +1,242 @@
+# ============================================
+# Database Alert Rules
+# Coding Agent - Microservices Platform
+# ============================================
+# These rules monitor PostgreSQL database health including connections,
+# replication, deadlocks, and query performance.
+
+groups:
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # ==========================================
+      # Connection Pool Exhaustion
+      # ==========================================
+      - alert: PostgreSQLConnectionPoolExhausted
+        expr: |
+          (
+            sum(pg_stat_database_numbackends)
+            /
+            pg_settings_max_connections
+          ) * 100 > 80
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+          category: capacity
+        annotations:
+          summary: "PostgreSQL connection pool near exhaustion"
+          description: "PostgreSQL is using {{ $value | humanize }}% of max connections (threshold: 80%)"
+          impact: "New connections may be rejected, services may fail"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-connections-high.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # High Transaction Rate
+      # ==========================================
+      - alert: PostgreSQLHighTransactionRate
+        expr: |
+          rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+          category: performance
+        annotations:
+          summary: "PostgreSQL experiencing high transaction rate"
+          description: "Database is processing {{ $value | humanize }} transactions/second (threshold: 1000/s)"
+          impact: "May indicate unusual load or need for optimization"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-transaction-rate-high.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Deadlock Detection
+      # ==========================================
+      - alert: PostgreSQLDeadlocksDetected
+        expr: |
+          rate(pg_stat_database_deadlocks[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          category: reliability
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+          description: "{{ $value | humanize }} deadlocks per second detected"
+          impact: "Transactions are being rolled back, may affect data consistency"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-deadlocks.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Long Running Queries
+      # ==========================================
+      - alert: PostgreSQLLongRunningQueries
+        expr: |
+          pg_stat_activity_max_tx_duration{state="active"} > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          category: performance
+        annotations:
+          summary: "PostgreSQL has long-running queries"
+          description: "Longest running query has been active for {{ $value | humanizeDuration }}"
+          impact: "May cause lock contention and slow down other queries"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-slow-queries.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Replication Lag (if configured)
+      # ==========================================
+      - alert: PostgreSQLReplicationLag
+        expr: |
+          pg_replication_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+          category: replication
+        annotations:
+          summary: "PostgreSQL replication lag detected"
+          description: "Replication lag is {{ $value | humanizeDuration }} (threshold: 30s)"
+          impact: "Read replicas are serving stale data"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-replication-lag.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Cache Hit Ratio Low
+      # ==========================================
+      - alert: PostgreSQLCacheHitRatioLow
+        expr: |
+          (
+            sum(pg_stat_database_blks_hit)
+            /
+            (sum(pg_stat_database_blks_hit) + sum(pg_stat_database_blks_read))
+          ) * 100 < 90
+        for: 15m
+        labels:
+          severity: warning
+          component: database
+          category: performance
+        annotations:
+          summary: "PostgreSQL cache hit ratio is low"
+          description: "Cache hit ratio is {{ $value | humanize }}% (threshold: 90%)"
+          impact: "Increased disk I/O, slower query performance"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-cache-hit-low.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Table Bloat High
+      # ==========================================
+      - alert: PostgreSQLTableBloat
+        expr: |
+          pg_table_bloat_ratio > 20
+        for: 1h
+        labels:
+          severity: warning
+          component: database
+          category: maintenance
+        annotations:
+          summary: "PostgreSQL table {{ $labels.table }} has high bloat"
+          description: "Table bloat is {{ $value | humanize }}% (threshold: 20%)"
+          impact: "Wasted disk space and slower queries, needs VACUUM"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-table-bloat.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Too Many Idle Connections
+      # ==========================================
+      - alert: PostgreSQLTooManyIdleConnections
+        expr: |
+          sum(pg_stat_activity_count{state="idle"}) > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+          category: capacity
+        annotations:
+          summary: "PostgreSQL has too many idle connections"
+          description: "{{ $value | humanize }} idle connections detected (threshold: 50)"
+          impact: "Connection pool may be inefficient, wasting resources"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/postgresql-idle-connections.md"
+          dashboard_url: "http://localhost:3000/d/database-postgresql/database"
+
+      # ==========================================
+      # Redis Memory Usage High
+      # ==========================================
+      - alert: RedisMemoryHigh
+        expr: |
+          (
+            redis_memory_used_bytes
+            /
+            redis_memory_max_bytes
+          ) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          category: capacity
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis is using {{ $value | humanize }}% of max memory (threshold: 80%)"
+          impact: "May trigger eviction policy, affecting cache hit rate"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/redis-memory-high.md"
+          dashboard_url: "http://localhost:3000/d/cache-redis/redis-cache"
+
+      # ==========================================
+      # Redis Evicted Keys Rate High
+      # ==========================================
+      - alert: RedisEvictedKeysHigh
+        expr: |
+          rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          category: performance
+        annotations:
+          summary: "Redis is evicting keys at high rate"
+          description: "{{ $value | humanize }} keys evicted per second (threshold: 100/s)"
+          impact: "Cache hit rate degraded, consider increasing memory"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/redis-evictions-high.md"
+          dashboard_url: "http://localhost:3000/d/cache-redis/redis-cache"
+
+      # ==========================================
+      # Redis Hit Rate Low
+      # ==========================================
+      - alert: RedisHitRateLow
+        expr: |
+          (
+            rate(redis_keyspace_hits_total[5m])
+            /
+            (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+          ) * 100 < 80
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+          category: performance
+        annotations:
+          summary: "Redis cache hit rate is low"
+          description: "Cache hit rate is {{ $value | humanize }}% (threshold: 80%)"
+          impact: "Increased database load, slower response times"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/redis-hit-rate-low.md"
+          dashboard_url: "http://localhost:3000/d/cache-redis/redis-cache"
+
+      # ==========================================
+      # Redis Connection Spike
+      # ==========================================
+      - alert: RedisConnectionSpike
+        expr: |
+          rate(redis_connected_clients[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          category: availability
+        annotations:
+          summary: "Redis experiencing connection spike"
+          description: "{{ $value | humanize }} new connections per second (threshold: 100/s)"
+          impact: "May indicate connection leak or attack"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/redis-connection-spike.md"
+          dashboard_url: "http://localhost:3000/d/cache-redis/redis-cache"

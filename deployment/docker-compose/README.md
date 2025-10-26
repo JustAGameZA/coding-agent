@@ -11,12 +11,582 @@ Production-ready Docker Compose configuration for the Coding Agent microservices
 - [Configuration](#configuration)
 - [Health Checks](#health-checks)
 - [Monitoring & Observability](#monitoring--observability)
+- [Observability Stack](#observability-stack)
 - [Troubleshooting](#troubleshooting)
 - [Production Considerations](#production-considerations)
+- [Documentation](#documentation)
 
-## 🎯 Overview
+# Docker Compose Deployment
 
-This Docker Compose setup provides all infrastructure services required for the Coding Agent platform:
+Complete Docker Compose setup for the Coding Agent microservices platform.
+
+## 📦 What's Included
+
+### Infrastructure Services (`docker-compose.yml`)
+- **PostgreSQL 16**: Multi-schema database (chat, orchestration, cicd_monitor)
+- **Redis 7**: Cache and session storage
+- **RabbitMQ 3.12**: Message queue with management UI
+- **Prometheus**: Metrics collection and alerting
+- **Alertmanager**: Alert routing and notifications
+- **Grafana**: Metrics visualization dashboards
+- **Jaeger**: Distributed tracing (OpenTelemetry)
+- **Seq**: Structured logging and log search
+- **Ollama**: Local LLM inference engine
+- **Exporters**: PostgreSQL, Redis, Node, cAdvisor metrics
+
+### Application Services
+
+#### Development Mode (`docker-compose.apps.dev.yml`)
+Hot-reload enabled services with volume mounts:
+- Gateway (YARP) - Port 5000
+- Chat Service - Port 5001
+- Orchestration Service - Port 5002
+- Ollama Service - Port 5003
+- GitHub Service - Port 5004
+- Browser Service - Port 5005
+- CI/CD Monitor - Port 5006
+- Dashboard BFF - Port 5007
+- ML Classifier (Python) - Port 8000
+- Angular Dashboard - Port 4200
+
+#### Production Mode (`docker-compose.apps.prod.yml`)
+Optimized builds from Dockerfiles:
+- All services built as multi-stage Docker images
+- Nginx-served Angular production build
+- Health checks and resource limits
+- Automatic restarts
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker 24+ with BuildKit enabled
+- Docker Compose v2.20+
+- 8GB RAM minimum (16GB recommended)
+- 20GB free disk space
+
+### 1. Infrastructure Only (Start Services First)
+
+```bash
+# From repo root
+cd deployment/docker-compose
+
+# Start infrastructure
+docker compose up -d
+
+# Verify all healthy
+docker compose ps
+```
+
+**Access Points:**
+- Grafana: http://localhost:3000 (admin/admin)
+- Prometheus: http://localhost:9090
+- Jaeger UI: http://localhost:16686
+- RabbitMQ: http://localhost:15672 (codingagent/devPassword123!)
+- Seq: http://localhost:5341
+- Ollama: http://localhost:11434
+
+**Observability:**
+- See [OBSERVABILITY-SUMMARY.md](./OBSERVABILITY-SUMMARY.md) for complete stack details
+- 13 Prometheus scrape jobs, 53 alert rules, 8 Grafana dashboards
+
+### 2. Development Mode (Hot Reload)
+
+```bash
+# Start infrastructure + dev apps
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml up
+
+# Or detached
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml up -d
+
+# Watch logs
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml logs -f gateway chat-service
+```
+
+**Key Features:**
+- Code changes trigger auto-reload (dotnet watch, uvicorn --reload, ng serve)
+- NuGet/pip/npm caches persist across restarts
+- Source code mounted for hot reload
+
+### 3. Production Mode (Optimized Builds)
+
+```bash
+# Build and start all services
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml up --build -d
+
+# Check health
+./health-check.sh
+
+# View logs
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml logs -f
+```
+
+**Key Features:**
+- Multi-stage Docker builds (SDK → Runtime)
+- Health checks with automatic restarts
+- Resource limits (CPU/memory)
+- No development dependencies
+- Nginx-served Angular build
+
+**Observability Stack:**
+- **13 Prometheus Targets**: All services + infrastructure
+- **53 Alert Rules**: 6 categories (API, Infrastructure, ML/AI, Database, Message Bus, Application)
+- **8 Grafana Dashboards**: API Gateway, System Health, Database, Cache, Backend Services, Alerts/SLOs, ML Classifier, Ollama
+- **Jaeger Tracing**: OTLP distributed tracing
+- **Seq Logging**: 14-day structured log retention
+
+## 📊 Observability Stack
+
+### Complete Monitoring Coverage
+
+**Metrics (Prometheus)**:
+- 13 scrape jobs (10 apps + 3 infrastructure components)
+- 15-second scrape interval
+- 30-day retention
+
+**Alerts (Alertmanager)**:
+- 53 alert rules across 6 categories
+- Severity-based routing (critical/warning/info)
+- Webhook receivers for Slack/PagerDuty/Email
+
+**Dashboards (Grafana)**:
+- 8 pre-configured dashboards
+- Auto-refresh every 10 seconds
+- Links to Seq for log correlation
+
+**Tracing (Jaeger)**:
+- OTLP endpoints (gRPC 4317, HTTP 4318)
+- All .NET services instrumented
+- W3C Trace Context propagation
+
+**Logging (Seq)**:
+- Structured logging from all services
+- 14-day retention
+- Correlation ID tracking
+
+### Quick Access
+
+```bash
+# Prometheus UI
+open http://localhost:9090
+
+# Grafana Dashboards
+open http://localhost:3000
+
+# Jaeger Traces
+open http://localhost:16686
+
+# Seq Logs
+open http://localhost:5341
+
+# Alertmanager
+open http://localhost:9093
+```
+
+### Verification Scripts
+
+```bash
+# Check all service health
+./health-check.sh
+
+# Validate alert rules
+./validate-alerts.sh
+
+# Verify Jaeger integration
+./verify-jaeger.sh
+```
+
+### Documentation
+
+- **[OBSERVABILITY-SUMMARY.md](./OBSERVABILITY-SUMMARY.md)**: Complete observability stack details
+- **[SEQ-LOGGING-GUIDE.md](./SEQ-LOGGING-GUIDE.md)**: Structured logging queries and workflows
+- **[ALERTING-SUMMARY.md](./ALERTING-SUMMARY.md)**: Alert rules and runbooks
+
+### Key Metrics by Service
+
+**Gateway (YARP)**:
+- `http_requests_total`, `http_request_duration_seconds`
+- `circuit_breaker_state`, `rate_limiter_throttled_total`
+
+**Chat Service**:
+- `signalr_active_connections`, `chat_message_delivery_failed_total`
+
+**Orchestration**:
+- `task_execution_total`, `task_queue_pending_count`
+- `task_execution_duration_seconds` (by strategy)
+
+**ML Classifier**:
+- `ml_classification_requests_total{classifier}` (heuristic/ml/llm)
+- `ml_model_accuracy`, `ml_confidence_score`
+
+**Ollama**:
+- `ollama_inference_requests_total{model}`
+- `ollama_tokens_generated_total`, `ollama_cost_total`
+
+**GitHub**:
+- `github_api_remaining_requests`, `github_pr_creation_duration_seconds`
+
+**Browser**:
+- `browser_automation_total`, `browser_timeout_total`
+
+### Alert Categories
+
+1. **API Alerts** (5 rules): Error rate, latency, request rate, circuit breaker, rate limiter
+2. **Infrastructure Alerts** (8 rules): CPU, memory, restarts, disk, service health
+3. **Message Bus Alerts** (8 rules): Queue depth, consumers, utilization, memory
+4. **ML/AI Alerts** (8 rules): Classifier health, latency, accuracy, errors
+5. **Database Alerts** (10 rules): Connections, queries, deadlocks, replication
+6. **Application Alerts** (14 rules): Task execution, SignalR, GitHub, browser
+
+## 📚 Documentation
+
+### Primary Documents
+- **[DOCKER-QUICK-START.md](./DOCKER-QUICK-START.md)**: Fast command reference
+- **[DOCKER-IMPLEMENTATION-SUMMARY.md](./DOCKER-IMPLEMENTATION-SUMMARY.md)**: Technical details
+- **[OBSERVABILITY-SUMMARY.md](./OBSERVABILITY-SUMMARY.md)**: Complete observability stack
+- **[SEQ-LOGGING-GUIDE.md](./SEQ-LOGGING-GUIDE.md)**: Structured logging guide
+- **[ALERTING-SUMMARY.md](./ALERTING-SUMMARY.md)**: Alert rules and runbooks
+
+### Configuration Files
+- `.env.template`: Environment variable template
+- `docker-compose.override.yml.template`: Local customization template
+- `prometheus.yml`: Prometheus scrape configuration (13 jobs)
+- `alertmanager.yml`: Alert routing and notification
+- `alerts/*.yml`: Alert rule definitions (53 rules)
+- `grafana/provisioning/dashboards/*.json`: Dashboard definitions (8 dashboards)
+
+### Operational Runbooks
+Located in `docs/runbooks/`:
+- `api-error-rate-high.md`
+- `api-latency-high.md`
+- `container-cpu-high.md`
+- `container-memory-high.md`
+- `rabbitmq-queue-depth-high.md`
+- Source mounted as volumes (../../src/)
+
+**Application URLs:**
+- Gateway: http://localhost:5000
+- Chat API: http://localhost:5001
+- Orchestration API: http://localhost:5002
+- Ollama Service: http://localhost:5003
+- GitHub API: http://localhost:5004
+- Browser API: http://localhost:5005
+- CI/CD Monitor: http://localhost:5006
+- Dashboard BFF: http://localhost:5007
+- ML Classifier: http://localhost:8000
+- Angular UI: http://localhost:4200
+
+### 3. Production Mode (Optimized Builds)
+
+```bash
+# Build and start all services
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml up --build -d
+
+# Check status
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml ps
+
+# View logs
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml logs -f
+```
+
+**Production Features:**
+- Multi-stage Dockerfile builds (SDK → Runtime)
+- Optimized Angular production build via Nginx
+- Health checks on all services
+- Structured logging to Seq
+- OpenTelemetry traces to Jaeger
+- Prometheus metrics scraping
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Create `.env` file in `deployment/docker-compose/`:
+
+```bash
+# Database
+POSTGRES_USER=codingagent
+POSTGRES_PASSWORD=your-secure-password
+POSTGRES_DB=codingagent
+
+# Redis
+REDIS_PASSWORD=your-redis-password
+
+# RabbitMQ
+RABBITMQ_USER=codingagent
+RABBITMQ_PASSWORD=your-rabbitmq-password
+RABBITMQ_VHOST=/
+
+# Grafana
+GRAFANA_USER=admin
+GRAFANA_PASSWORD=your-grafana-password
+
+# GitHub Integration (optional)
+GITHUB_APP_ID=your-app-id
+GITHUB_INSTALLATION_ID=your-installation-id
+GITHUB_PRIVATE_KEY=your-private-key-base64
+```
+
+### Port Mappings
+
+| Service | Dev Port | Prod Port | Health Port |
+|---------|----------|-----------|-------------|
+| Gateway | 5000 | 5000 | 5500 |
+| Chat | 5001 | 5001 | 5501 |
+| Orchestration | 5002 | 5002 | 5502 |
+| Ollama Service | 5003 | 5003 | 5503 |
+| GitHub | 5004 | 5004 | 5504 |
+| Browser | 5005 | 5005 | 5505 |
+| CI/CD Monitor | 5006 | 5006 | 5506 |
+| Dashboard BFF | 5007 | 5007 | 5507 |
+| ML Classifier | 8000 | 8000 | - |
+| Angular UI | 4200 | 4200 | - |
+
+## 📊 Observability
+
+### Metrics (Prometheus + Grafana)
+
+1. Open Grafana: http://localhost:3000
+2. Default credentials: `admin/admin`
+3. Pre-configured dashboards:
+   - ASP.NET Core Metrics
+   - PostgreSQL Performance
+   - RabbitMQ Queues
+   - Container Resource Usage
+
+**Custom Metrics:**
+```bash
+# Query Prometheus directly
+curl http://localhost:9090/api/v1/query?query=up
+
+# Service-specific metrics
+curl http://localhost:5001/metrics  # Chat service
+curl http://localhost:5002/metrics  # Orchestration
+```
+
+### Tracing (Jaeger)
+
+1. Open Jaeger: http://localhost:16686
+2. Select service (e.g., `coding-agent-chat`)
+3. View distributed traces across services
+
+**OpenTelemetry endpoints:**
+- gRPC: `http://jaeger:4317`
+- HTTP: `http://jaeger:4318`
+
+### Logging (Seq)
+
+1. Open Seq: http://localhost:5341
+2. Query structured logs:
+```
+@Level = 'Error'
+@MessageTemplate LIKE '%Task%'
+ServiceName = 'CodingAgent.Services.Orchestration'
+```
+
+## 🧪 Health Checks
+
+### Check All Services
+
+```bash
+# Infrastructure health
+curl http://localhost:5000/health  # Gateway
+curl http://localhost:5001/health  # Chat
+curl http://localhost:5002/health  # Orchestration
+curl http://localhost:5006/health  # CI/CD Monitor
+
+# Infrastructure services
+curl http://localhost:9090/-/healthy  # Prometheus
+curl http://localhost:14269/  # Jaeger
+```
+
+### Automated Health Check Script
+
+```bash
+# From deployment/docker-compose/
+./health-check.sh
+
+# Expected output:
+# ✓ Gateway: healthy
+# ✓ Chat Service: healthy
+# ✓ Orchestration: healthy
+# ✓ PostgreSQL: healthy
+# ✓ Redis: healthy
+# ✓ RabbitMQ: healthy
+```
+
+## 🐛 Troubleshooting
+
+### Service Won't Start
+
+```bash
+# Check logs
+docker compose logs <service-name>
+
+# Example
+docker compose logs postgres
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml logs chat-service
+
+# Check resource usage
+docker stats
+
+# Restart specific service
+docker compose restart <service-name>
+```
+
+### Database Connection Issues
+
+```bash
+# Verify PostgreSQL is running
+docker compose exec postgres pg_isready -U codingagent
+
+# Check database schemas
+docker compose exec postgres psql -U codingagent -d codingagent -c '\dn'
+
+# Reinitialize database
+docker compose down -v  # WARNING: Deletes data!
+docker compose up -d postgres
+```
+
+### RabbitMQ Queue Backlog
+
+```bash
+# Check queue depth
+curl -u codingagent:devPassword123! http://localhost:15672/api/queues
+
+# Purge queue (dev only!)
+curl -u codingagent:devPassword123! -X DELETE \
+  http://localhost:15672/api/queues/%2F/queue-name/contents
+```
+
+### Hot Reload Not Working (Dev Mode)
+
+```bash
+# Ensure polling is enabled (Windows/Mac)
+# Already set in docker-compose.apps.dev.yml:
+# DOTNET_USE_POLLING_FILE_WATCHER: "true"
+# CHOKIDAR_USEPOLLING: "true" (Angular)
+
+# Rebuild volumes
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml down
+docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml up --build
+```
+
+### Clean Restart
+
+```bash
+# Stop all services
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml down
+
+# Remove volumes (WARNING: deletes data!)
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml down -v
+
+# Remove all images
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml down --rmi all
+
+# Start fresh
+docker compose -f docker-compose.yml -f docker-compose.apps.prod.yml up --build -d
+```
+
+## 📈 Performance Tuning
+
+### Resource Limits (Production)
+
+Add to services in `docker-compose.apps.prod.yml`:
+
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '2'
+      memory: 2G
+    reservations:
+      cpus: '0.5'
+      memory: 512M
+```
+
+### Database Performance
+
+```sql
+-- Connect to PostgreSQL
+docker compose exec postgres psql -U codingagent -d codingagent
+
+-- Check connection pool usage
+SELECT count(*) FROM pg_stat_activity;
+
+-- Enable query timing
+ALTER DATABASE codingagent SET log_min_duration_statement = 100;
+```
+
+### Ollama GPU Support
+
+Uncomment in `docker-compose.yml`:
+
+```yaml
+ollama:
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+```
+
+Requires NVIDIA Container Toolkit installed.
+
+## 🔐 Security
+
+### Production Checklist
+
+- [ ] Change all default passwords in `.env`
+- [ ] Use secrets management (Docker Swarm secrets, Kubernetes secrets)
+- [ ] Enable HTTPS with valid certificates
+- [ ] Configure firewall rules (only expose Gateway port)
+- [ ] Enable RabbitMQ TLS
+- [ ] Use read-only volumes where possible
+- [ ] Scan images for vulnerabilities (`docker scan`)
+- [ ] Implement rate limiting at Gateway
+- [ ] Rotate JWT signing keys regularly
+- [ ] Enable Grafana authentication
+- [ ] Restrict Prometheus/Jaeger access
+
+### Example: Docker Secrets (Swarm Mode)
+
+```bash
+# Create secrets
+echo "supersecretpassword" | docker secret create postgres_password -
+echo "supersecretredis" | docker secret create redis_password -
+
+# Update docker-compose.yml
+services:
+  postgres:
+    secrets:
+      - postgres_password
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+secrets:
+  postgres_password:
+    external: true
+  redis_password:
+    external: true
+```
+
+## 📚 Additional Resources
+
+- [Architecture Overview](../../docs/00-OVERVIEW.md)
+- [Service Catalog](../../docs/01-SERVICE-CATALOG.md)
+- [Implementation Roadmap](../../docs/02-IMPLEMENTATION-ROADMAP.md)
+- [Alerting Summary](./ALERTING-SUMMARY.md)
+- [Runbooks](../../docs/runbooks/)
+
+## 🤝 Support
+
+For issues or questions:
+1. Check logs: `docker compose logs <service>`
+2. Review [troubleshooting section](#-troubleshooting)
+3. Consult [runbooks](../../docs/runbooks/)
+4. Open GitHub issue with logs attached
 
 - **Database**: PostgreSQL 16 with pre-configured schemas
 - **Cache**: Redis 7 with persistence

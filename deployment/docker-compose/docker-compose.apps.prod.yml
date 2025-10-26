@@ -1,0 +1,424 @@
+# ============================================
+# Production Apps Docker Compose
+# Coding Agent - Application Services
+#
+# Usage (from repo root):
+#   docker compose -f deployment/docker-compose/docker-compose.yml -f deployment/docker-compose/docker-compose.apps.prod.yml up -d
+#
+# This runs optimized production builds:
+# - .NET services built from Dockerfiles
+# - Python FastAPI production server
+# - Angular production build via Nginx
+# ============================================
+
+networks:
+  coding-agent:
+    driver: bridge
+
+services:
+  # ==========================================
+  # Gateway (YARP)
+  # ==========================================
+  gateway:
+    build:
+      context: ../../
+      dockerfile: src/Gateway/CodingAgent.Gateway/Dockerfile
+    image: coding-agent/gateway:latest
+    container_name: coding-agent-gateway
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+      - "5500:5500"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5000;http://0.0.0.0:5500"
+      Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
+      ReverseProxy__Routes__chat__ClusterId: "chat-cluster"
+      ReverseProxy__Routes__chat__Match__Path: "/api/chat/{**catch-all}"
+      ReverseProxy__Routes__orchestration__ClusterId: "orchestration-cluster"
+      ReverseProxy__Routes__orchestration__Match__Path: "/api/orchestration/{**catch-all}"
+      ReverseProxy__Routes__github__ClusterId: "github-cluster"
+      ReverseProxy__Routes__github__Match__Path: "/api/github/{**catch-all}"
+      ReverseProxy__Routes__browser__ClusterId: "browser-cluster"
+      ReverseProxy__Routes__browser__Match__Path: "/api/browser/{**catch-all}"
+      ReverseProxy__Routes__cicd__ClusterId: "cicd-cluster"
+      ReverseProxy__Routes__cicd__Match__Path: "/api/cicd/{**catch-all}"
+      ReverseProxy__Routes__ollama__ClusterId: "ollama-cluster"
+      ReverseProxy__Routes__ollama__Match__Path: "/api/ollama/{**catch-all}"
+      ReverseProxy__Routes__dashboard__ClusterId: "dashboard-cluster"
+      ReverseProxy__Routes__dashboard__Match__Path: "/api/dashboard/{**catch-all}"
+      ReverseProxy__Clusters__chat-cluster__Destinations__destination1__Address: "http://chat-service:5001"
+      ReverseProxy__Clusters__orchestration-cluster__Destinations__destination1__Address: "http://orchestration-service:5002"
+      ReverseProxy__Clusters__github-cluster__Destinations__destination1__Address: "http://github-service:5004"
+      ReverseProxy__Clusters__browser-cluster__Destinations__destination1__Address: "http://browser-service:5005"
+      ReverseProxy__Clusters__cicd-cluster__Destinations__destination1__Address: "http://cicd-monitor-service:5006"
+      ReverseProxy__Clusters__ollama-cluster__Destinations__destination1__Address: "http://ollama-service:5003"
+      ReverseProxy__Clusters__dashboard-cluster__Destinations__destination1__Address: "http://dashboard-bff:5007"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - redis
+      - chat-service
+      - orchestration-service
+      - github-service
+      - browser-service
+      - cicd-monitor-service
+      - ollama-service
+      - dashboard-bff
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5500/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Chat Service
+  # ==========================================
+  chat-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/Chat/CodingAgent.Services.Chat/Dockerfile
+    image: coding-agent/chat-service:latest
+    container_name: coding-agent-chat
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+      - "5501:5501"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5001;http://0.0.0.0:5501"
+      ConnectionStrings__ChatDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5501/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Orchestration Service
+  # ==========================================
+  orchestration-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/Orchestration/CodingAgent.Services.Orchestration/Dockerfile
+    image: coding-agent/orchestration-service:latest
+    container_name: coding-agent-orchestration
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+      - "5502:5502"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5002;http://0.0.0.0:5502"
+      ConnectionStrings__OrchestrationDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      Services__MLClassifier__BaseUrl: "http://ml-classifier:8000"
+      Services__Ollama__BaseUrl: "http://ollama-service:5003"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - postgres
+      - rabbitmq
+      - ml-classifier
+      - ollama-service
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5502/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # GitHub Service
+  # ==========================================
+  github-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/GitHub/CodingAgent.Services.GitHub/Dockerfile
+    image: coding-agent/github-service:latest
+    container_name: coding-agent-github
+    restart: unless-stopped
+    ports:
+      - "5004:5004"
+      - "5504:5504"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5004;http://0.0.0.0:5504"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      GitHub__AppId: ${GITHUB_APP_ID}
+      GitHub__InstallationId: ${GITHUB_INSTALLATION_ID}
+      GitHub__PrivateKey: ${GITHUB_PRIVATE_KEY}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - rabbitmq
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5504/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Browser Service
+  # ==========================================
+  browser-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/Browser/CodingAgent.Services.Browser/Dockerfile
+    image: coding-agent/browser-service:latest
+    container_name: coding-agent-browser
+    restart: unless-stopped
+    ports:
+      - "5005:5005"
+      - "5505:5505"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5005;http://0.0.0.0:5505"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - rabbitmq
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5505/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # CI/CD Monitor Service
+  # ==========================================
+  cicd-monitor-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor/Dockerfile
+    image: coding-agent/cicd-monitor-service:latest
+    container_name: coding-agent-cicd-monitor
+    restart: unless-stopped
+    ports:
+      - "5006:5006"
+      - "5506:5506"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5006;http://0.0.0.0:5506"
+      ConnectionStrings__CICDMonitorDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5506/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Ollama Service
+  # ==========================================
+  ollama-service:
+    build:
+      context: ../../
+      dockerfile: src/Services/Ollama/CodingAgent.Services.Ollama/Dockerfile
+    image: coding-agent/ollama-service:latest
+    container_name: coding-agent-ollama-service
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+      - "5503:5503"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5003;http://0.0.0.0:5503"
+      Services__Ollama__BaseUrl: "http://ollama:11434"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - ollama
+      - rabbitmq
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5503/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Dashboard BFF (Server)
+  # ==========================================
+  dashboard-bff:
+    build:
+      context: ../../
+      dockerfile: src/Services/Dashboard/CodingAgent.Services.Dashboard/Dockerfile
+    image: coding-agent/dashboard-bff:latest
+    container_name: coding-agent-dashboard-bff
+    restart: unless-stopped
+    ports:
+      - "5007:5007"
+      - "5507:5507"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://0.0.0.0:5007;http://0.0.0.0:5507"
+      Services__Chat__BaseUrl: "http://chat-service:5001"
+      Services__Orchestration__BaseUrl: "http://orchestration-service:5002"
+      Services__GitHub__BaseUrl: "http://github-service:5004"
+      Services__CICDMonitor__BaseUrl: "http://cicd-monitor-service:5006"
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Seq__ServerUrl: "http://seq:5341"
+    depends_on:
+      - chat-service
+      - orchestration-service
+      - github-service
+      - cicd-monitor-service
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5507/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # ML Classifier (FastAPI)
+  # ==========================================
+  ml-classifier:
+    build:
+      context: ../../src/Services/MLClassifier/ml_classifier_service
+      dockerfile: Dockerfile
+    image: coding-agent/ml-classifier:latest
+    container_name: coding-agent-ml-classifier
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: "info"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-codingagent}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-devPassword123!}
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # Dashboard UI (Angular - Production Build)
+  # ==========================================
+  dashboard-ui:
+    build:
+      context: ../../src/Frontend/coding-agent-dashboard
+      dockerfile: Dockerfile
+    image: coding-agent/dashboard-ui:latest
+    container_name: coding-agent-dashboard-ui
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    environment:
+      API_BASE_URL: "http://gateway:5000"
+    depends_on:
+      - gateway
+      - dashboard-bff
+    networks:
+      - coding-agent
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,268 @@
+# ============================================
+# ML/AI Services Alert Rules
+# Coding Agent - Microservices Platform
+# ============================================
+# These rules monitor ML Classifier, Ollama Service, and LLM inference
+# for performance, availability, and capacity issues.
+
+groups:
+  - name: ml_ai_alerts
+    interval: 30s
+    rules:
+      # ==========================================
+      # ML Classifier Service Down
+      # ==========================================
+      - alert: MLClassifierDown
+        expr: |
+          up{job="ml-classifier-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: ml
+          category: availability
+        annotations:
+          summary: "ML Classifier service is down"
+          description: "ML Classifier service is not responding to health checks"
+          impact: "Task classification unavailable, orchestration may use fallback"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ml-classifier-down.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # ML Classifier High Latency
+      # ==========================================
+      - alert: MLClassifierLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{job="ml-classifier-service"}[5m])
+            )
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: ml
+          category: performance
+        annotations:
+          summary: "ML Classifier experiencing high latency"
+          description: "ML Classifier p95 latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+          impact: "Task classification is slow, affecting orchestration response time"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ml-classifier-latency-high.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # ML Classification Error Rate High
+      # ==========================================
+      - alert: MLClassificationErrorRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{job="ml-classifier-service",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="ml-classifier-service"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: ml
+          category: reliability
+        annotations:
+          summary: "High ML classification error rate"
+          description: "ML Classifier error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          impact: "Classification failures affecting task routing accuracy"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ml-classification-errors.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # LLM Fallback Rate High
+      # ==========================================
+      - alert: LLMFallbackRateHigh
+        expr: |
+          (
+            rate(ml_classifier_llm_fallback_total[10m])
+            /
+            rate(ml_classifier_classifications_total[10m])
+          ) > 0.10
+        for: 10m
+        labels:
+          severity: warning
+          component: ml
+          category: performance
+        annotations:
+          summary: "High LLM fallback rate detected"
+          description: "{{ $value | humanizePercentage }} of classifications falling back to expensive LLM (threshold: 10%)"
+          impact: "Increased latency and cost due to LLM usage"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/llm-fallback-rate-high.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Ollama Service Down
+      # ==========================================
+      - alert: OllamaServiceDown
+        expr: |
+          up{job="ollama-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: llm
+          category: availability
+        annotations:
+          summary: "Ollama service is down"
+          description: "Ollama service is not responding to health checks"
+          impact: "Local LLM inference unavailable, orchestration may fail"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ollama-service-down.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Ollama Backend Down
+      # ==========================================
+      - alert: OllamaBackendDown
+        expr: |
+          up{job="ollama-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: llm
+          category: availability
+        annotations:
+          summary: "Ollama backend (inference engine) is down"
+          description: "Ollama backend at port 11434 is not responding"
+          impact: "LLM model inference completely unavailable"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ollama-backend-down.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # LLM Inference Latency High
+      # ==========================================
+      - alert: LLMInferenceLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, model) (
+              rate(ollama_request_duration_seconds_bucket[5m])
+            )
+          ) > 5.0
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+          category: performance
+        annotations:
+          summary: "High LLM inference latency for model {{ $labels.model }}"
+          description: "LLM model {{ $labels.model }} p95 inference time is {{ $value | humanizeDuration }} (threshold: 5s)"
+          impact: "Slow LLM responses affecting task execution time"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/llm-inference-latency-high.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Model Load Failures
+      # ==========================================
+      - alert: ModelLoadFailures
+        expr: |
+          rate(ollama_model_load_errors_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: llm
+          category: reliability
+        annotations:
+          summary: "LLM model loading failures detected"
+          description: "{{ $value | humanize }} model load failures per second"
+          impact: "Models failing to load, LLM inference may be unavailable"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/model-load-failures.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # GPU Memory High (if GPU enabled)
+      # ==========================================
+      - alert: GPUMemoryHigh
+        expr: |
+          (
+            ollama_gpu_memory_used_bytes
+            /
+            ollama_gpu_memory_total_bytes
+          ) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+          category: capacity
+        annotations:
+          summary: "High GPU memory usage"
+          description: "GPU memory usage is {{ $value | humanize }}% (threshold: 90%)"
+          impact: "May affect LLM inference performance or cause OOM"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/gpu-memory-high.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Model Context Length Exceeded
+      # ==========================================
+      - alert: ModelContextLengthExceeded
+        expr: |
+          rate(ollama_context_length_exceeded_total[10m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: llm
+          category: usage
+        annotations:
+          summary: "Model context length frequently exceeded"
+          description: "{{ $value | humanize }} requests per second exceeding model context length"
+          impact: "Requests being truncated or rejected, may need larger context models"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/context-length-exceeded.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Token Usage Rate High (Cost Alert)
+      # ==========================================
+      - alert: TokenUsageRateHigh
+        expr: |
+          sum(rate(ollama_tokens_generated_total[1h])) > 1000000
+        for: 30m
+        labels:
+          severity: warning
+          component: llm
+          category: cost
+        annotations:
+          summary: "High token generation rate"
+          description: "Generating {{ $value | humanize }} tokens per second over 1 hour"
+          impact: "High LLM usage may indicate inefficiency or unexpected load"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/token-usage-high.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # ML Model Training Needed
+      # ==========================================
+      - alert: MLModelTrainingNeeded
+        expr: |
+          (time() - ml_classifier_last_training_timestamp_seconds) > 604800
+        for: 1h
+        labels:
+          severity: info
+          component: ml
+          category: maintenance
+        annotations:
+          summary: "ML model training overdue"
+          description: "ML model hasn't been retrained in {{ $value | humanizeDuration }} (threshold: 7 days)"
+          impact: "Model accuracy may degrade without periodic retraining"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/ml-model-training-needed.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
+
+      # ==========================================
+      # Classification Confidence Low
+      # ==========================================
+      - alert: ClassificationConfidenceLow
+        expr: |
+          (
+            sum(rate(ml_classifier_low_confidence_total[10m]))
+            /
+            sum(rate(ml_classifier_classifications_total[10m]))
+          ) > 0.20
+        for: 15m
+        labels:
+          severity: warning
+          component: ml
+          category: quality
+        annotations:
+          summary: "High rate of low-confidence classifications"
+          description: "{{ $value | humanizePercentage }} of classifications have low confidence (threshold: 20%)"
+          impact: "Classification quality degraded, may need model retraining"
+          runbook_url: "https://github.com/JustAGameZA/coding-agent/blob/main/docs/runbooks/classification-confidence-low.md"
+          dashboard_url: "http://localhost:3000/d/ml-services/ml-services"
