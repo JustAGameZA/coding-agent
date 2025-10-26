@@ -1,5 +1,6 @@
 using CodingAgent.Services.CICDMonitor.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
 
@@ -58,11 +59,12 @@ public class CICDMonitorDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(500);
 
+            // Persist error messages as JSON (jsonb) for robustness
             entity.Property(b => b.ErrorMessages)
                 .HasConversion(
-                    v => string.Join("|||", v),
-                    v => v.Split("|||", StringSplitOptions.RemoveEmptyEntries).ToList())
-                .HasMaxLength(4000);
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v) ?? new List<string>())
+                .HasColumnType("jsonb");
         });
     }
 }
