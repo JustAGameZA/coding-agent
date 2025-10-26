@@ -13,6 +13,7 @@ volumes:
   rabbitmq_data:
   prometheus_data:
   grafana_data:
+  ollama_data:
 
 services:
   # ==========================================
@@ -370,6 +371,39 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================
+  # LLM Backend - Ollama
+  # ==========================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: coding-agent-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - coding-agent
+    # GPU support - uncomment for NVIDIA GPUs
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "if command -v wget >/dev/null 2>&1; then wget --no-verbose --tries=1 --spider http://localhost:11434/api/tags; elif command -v curl >/dev/null 2>&1; then curl -fsS http://localhost:11434/api/tags >/dev/null; else echo 'no http client' >&2 && exit 1; fi"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     logging:
       driver: "json-file"
       options:
