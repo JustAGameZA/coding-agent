@@ -9,6 +9,8 @@ namespace CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
 /// </summary>
 public class CICDMonitorDbContext : DbContext
 {
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions();
+
     public CICDMonitorDbContext(DbContextOptions<CICDMonitorDbContext> options)
         : base(options)
     {
@@ -62,8 +64,8 @@ public class CICDMonitorDbContext : DbContext
             // Persist error messages as JSON (jsonb) for robustness
             entity.Property(b => b.ErrorMessages)
                 .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<string>>(v) ?? new List<string>())
+                    v => JsonSerializer.Serialize(v, JsonOptions),
+                    v => JsonSerializer.Deserialize<List<string>>(v, JsonOptions) ?? new List<string>())
                 .HasColumnType("jsonb");
         });
     }
