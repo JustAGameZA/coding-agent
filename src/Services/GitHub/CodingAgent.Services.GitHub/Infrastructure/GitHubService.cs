@@ -267,6 +267,259 @@ public class GitHubService : IGitHubService
 
     #endregion
 
+    #region Pull Request Operations
+
+    public async Task<Domain.Entities.PullRequest> CreatePullRequestAsync(
+        string owner,
+        string repo,
+        string title,
+        string body,
+        string head,
+        string baseRef,
+        bool isDraft = false,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Creating pull request in {Owner}/{Repo} from {Head} to {Base}",
+                owner, repo, head, baseRef);
+
+            var newPr = new NewPullRequest(title, head, baseRef)
+            {
+                Body = body,
+                Draft = isDraft
+            };
+
+            var pr = await _client.PullRequest.Create(owner, repo, newPr);
+
+            _logger.LogInformation("Successfully created pull request #{Number} in {Owner}/{Repo}",
+                pr.Number, owner, repo);
+
+            return MapToPullRequest(pr, owner, repo);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to create pull request in {Owner}/{Repo}", owner, repo);
+            throw new InvalidOperationException($"Failed to create pull request: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Domain.Entities.PullRequest> GetPullRequestAsync(
+        string owner,
+        string repo,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Getting pull request #{Number} from {Owner}/{Repo}",
+                number, owner, repo);
+
+            var pr = await _client.PullRequest.Get(owner, repo, number);
+
+            _logger.LogInformation("Successfully retrieved pull request #{Number}", number);
+
+            return MapToPullRequest(pr, owner, repo);
+        }
+        catch (NotFoundException ex)
+        {
+            _logger.LogWarning("Pull request #{Number} not found in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Pull request not found: {owner}/{repo}#{number}", ex);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to get pull request #{Number} from {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to get pull request: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<IEnumerable<Domain.Entities.PullRequest>> ListPullRequestsAsync(
+        string owner,
+        string repo,
+        string? state = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Listing pull requests for {Owner}/{Repo} with state: {State}",
+                owner, repo, state ?? "all");
+
+            var request = new PullRequestRequest
+            {
+                State = state switch
+                {
+                    "open" => ItemStateFilter.Open,
+                    "closed" => ItemStateFilter.Closed,
+                    "all" => ItemStateFilter.All,
+                    _ => ItemStateFilter.Open
+                }
+            };
+
+            var prs = await _client.PullRequest.GetAllForRepository(owner, repo, request);
+
+            _logger.LogInformation("Found {Count} pull requests", prs.Count);
+
+            return prs.Select(pr => MapToPullRequest(pr, owner, repo));
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to list pull requests for {Owner}/{Repo}", owner, repo);
+            throw new InvalidOperationException($"Failed to list pull requests: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Domain.Entities.PullRequest> MergePullRequestAsync(
+        string owner,
+        string repo,
+        int number,
+        string mergeMethod = "merge",
+        string? commitTitle = null,
+        string? commitMessage = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Merging pull request #{Number} in {Owner}/{Repo} using {MergeMethod}",
+                number, owner, repo, mergeMethod);
+
+            var mergePr = new MergePullRequest
+            {
+                CommitTitle = commitTitle,
+                CommitMessage = commitMessage,
+                MergeMethod = mergeMethod switch
+                {
+                    "squash" => PullRequestMergeMethod.Squash,
+                    "rebase" => PullRequestMergeMethod.Rebase,
+                    _ => PullRequestMergeMethod.Merge
+                }
+            };
+
+            var mergeResult = await _client.PullRequest.Merge(owner, repo, number, mergePr);
+
+            if (!mergeResult.Merged)
+            {
+                _logger.LogWarning("Pull request #{Number} was not merged: {Message}",
+                    number, mergeResult.Message);
+                throw new InvalidOperationException($"Pull request was not merged: {mergeResult.Message}");
+            }
+
+            _logger.LogInformation("Successfully merged pull request #{Number}", number);
+
+            // Get the updated PR after merge
+            var pr = await _client.PullRequest.Get(owner, repo, number);
+            return MapToPullRequest(pr, owner, repo);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to merge pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to merge pull request: {ex.Message}", ex);
+        }
+    }
+
+    public async Task ClosePullRequestAsync(
+        string owner,
+        string repo,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Closing pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+
+            var update = new PullRequestUpdate
+            {
+                State = ItemState.Closed
+            };
+
+            await _client.PullRequest.Update(owner, repo, number, update);
+
+            _logger.LogInformation("Successfully closed pull request #{Number}", number);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to close pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to close pull request: {ex.Message}", ex);
+        }
+    }
+
+    public async Task AddCommentAsync(
+        string owner,
+        string repo,
+        int number,
+        string comment,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Adding comment to pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+
+            await _client.Issue.Comment.Create(owner, repo, number, comment);
+
+            _logger.LogInformation("Successfully added comment to pull request #{Number}", number);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to add comment to pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to add comment: {ex.Message}", ex);
+        }
+    }
+
+    public async Task RequestReviewAsync(
+        string owner,
+        string repo,
+        int number,
+        IEnumerable<string> reviewers,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var reviewerList = reviewers.ToList();
+            _logger.LogInformation("Requesting review for pull request #{Number} in {Owner}/{Repo} from {Reviewers}",
+                number, owner, repo, string.Join(", ", reviewerList));
+
+            var request = new PullRequestReviewRequest(reviewerList, new List<string>());
+
+            await _client.PullRequest.ReviewRequest.Create(owner, repo, number, request);
+
+            _logger.LogInformation("Successfully requested review for pull request #{Number}", number);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to request review for pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to request review: {ex.Message}", ex);
+        }
+    }
+
+    public async Task ApprovePullRequestAsync(
+        string owner,
+        string repo,
+        int number,
+        string? body = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Approving pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+
+            var review = new PullRequestReviewCreate
+            {
+                Body = body,
+                Event = PullRequestReviewEvent.Approve
+            };
+
+            await _client.PullRequest.Review.Create(owner, repo, number, review);
+
+            _logger.LogInformation("Successfully approved pull request #{Number}", number);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogError(ex, "Failed to approve pull request #{Number} in {Owner}/{Repo}", number, owner, repo);
+            throw new InvalidOperationException($"Failed to approve pull request: {ex.Message}", ex);
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Domain.Entities.Repository MapToRepository(Octokit.Repository octokitRepo)
@@ -285,6 +538,32 @@ public class GitHubService : IGitHubService
             CreatedAt = octokitRepo.CreatedAt.UtcDateTime,
             UpdatedAt = octokitRepo.UpdatedAt.UtcDateTime,
             LastSyncedAt = DateTime.UtcNow
+        };
+    }
+
+    private static Domain.Entities.PullRequest MapToPullRequest(Octokit.PullRequest octokitPr, string owner, string repo)
+    {
+        return new Domain.Entities.PullRequest
+        {
+            Id = Guid.NewGuid(),
+            GitHubId = octokitPr.Id,
+            Number = octokitPr.Number,
+            Owner = owner,
+            RepositoryName = repo,
+            Title = octokitPr.Title,
+            Body = octokitPr.Body,
+            Head = octokitPr.Head.Ref,
+            Base = octokitPr.Base.Ref,
+            State = octokitPr.State.StringValue,
+            IsMerged = octokitPr.Merged,
+            IsDraft = octokitPr.Draft,
+            Author = octokitPr.User.Login,
+            Url = octokitPr.Url,
+            HtmlUrl = octokitPr.HtmlUrl,
+            CreatedAt = octokitPr.CreatedAt.UtcDateTime,
+            UpdatedAt = octokitPr.UpdatedAt.UtcDateTime,
+            MergedAt = octokitPr.MergedAt?.UtcDateTime,
+            ClosedAt = octokitPr.ClosedAt?.UtcDateTime
         };
     }
 

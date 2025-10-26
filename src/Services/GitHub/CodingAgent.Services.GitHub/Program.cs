@@ -73,6 +73,9 @@ app.MapRepositoryEndpoints();
 // Map branch endpoints
 app.MapBranchEndpoints();
 
+// Map pull request endpoints
+app.MapPullRequestEndpoints();
+
 // Map webhook endpoints
 app.MapWebhookEndpoints();
 
