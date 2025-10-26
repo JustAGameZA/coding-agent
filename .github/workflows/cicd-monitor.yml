@@ -47,10 +47,10 @@ jobs:
       - name: Build
         run: dotnet build CodingAgent.sln -c Release --no-restore
 
-      - name: Test (Unit, CICD Monitor only)
+      - name: Test (Unit only)
         run: >-
-          dotnet test src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor.Tests/CodingAgent.Services.CICDMonitor.Tests.csproj
-          -c Release --no-build --no-restore --settings ./.runsettings --filter "Category=Unit"
+          dotnet test CodingAgent.sln -c Release --no-build --no-restore
+          --settings ./.runsettings --filter "Category=Unit"
           --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
