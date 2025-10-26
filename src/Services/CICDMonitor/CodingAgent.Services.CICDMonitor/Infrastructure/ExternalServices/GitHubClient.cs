@@ -44,4 +44,23 @@ public class GitHubClient : IGitHubClient
             throw;
         }
     }
+
+    public async Task<RepositoryInfo> GetRepositoryAsync(string owner, string repo, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogDebug("Fetching repository metadata: {Owner}/{Repo}", owner, repo);
+            var response = await _httpClient.GetFromJsonAsync<RepositoryInfo>($"/repositories/{owner}/{repo}", cancellationToken);
+            if (response is null)
+            {
+                throw new InvalidOperationException("Failed to deserialize RepositoryInfo");
+            }
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch repository metadata for {Owner}/{Repo}", owner, repo);
+            throw;
+        }
+    }
 }
