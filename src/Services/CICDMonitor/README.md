@@ -202,7 +202,7 @@ dotnet test
 ```dockerfile
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
 WORKDIR /app
-EXPOSE 5000
+EXPOSE 5005
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
@@ -244,7 +244,12 @@ Key metrics:
 
 ### Rate limiting errors
 - Increase delay between polls (default: 60 seconds)
-- Check GitHub rate limit status: `curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/rate_limit`
+- Check GitHub rate limit status:
+  ```bash
+  # Store token in environment variable for security
+  export GITHUB_TOKEN="your_token_here"
+  curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit
+  ```
 
 ### Database connection errors
 - Verify PostgreSQL is running and accessible
