@@ -14,6 +14,9 @@ public class HardwareDetector : IHardwareDetector
     private readonly IOllamaHttpClient _ollamaClient;
     private readonly ILogger<HardwareDetector> _logger;
 
+    // Default RAM estimate used when precise detection isn't available (e.g., on Windows until WMI is implemented)
+    private const double DEFAULT_RAM_GB_ESTIMATE = 16.0;
+
     public HardwareDetector(IOllamaHttpClient ollamaClient, ILogger<HardwareDetector> logger)
     {
         _ollamaClient = ollamaClient;
@@ -29,20 +32,20 @@ public class HardwareDetector : IHardwareDetector
 
         try
         {
-            // Try to get GPU info from Ollama backend first
+            // Try to detect GPU via system tools first (nvidia-smi/rocm-smi)
             var ollamaInfo = await TryGetOllamaSystemInfoAsync(cancellationToken);
             if (ollamaInfo != null)
             {
                 _logger.LogInformation(
-                    "Hardware detected from Ollama: {GpuType} with {VramGB}GB VRAM, {CpuCores} CPU cores, {RamGB}GB RAM",
+                    "Hardware detected via system tools: {GpuType} with {VramGB}GB VRAM, {CpuCores} CPU cores, {RamGB}GB RAM",
                     ollamaInfo.GpuType, ollamaInfo.VramGB, ollamaInfo.CpuCores, ollamaInfo.RamGB);
                 return ollamaInfo;
             }
 
-            // Fallback to system-level detection
-            _logger.LogWarning("Could not get hardware info from Ollama, falling back to system detection");
+            // Fallback to generic system hardware detection
+            _logger.LogWarning("Could not detect GPU via system tools, falling back to generic system detection");
             var systemProfile = await DetectSystemHardwareAsync(cancellationToken);
-            
+
             _logger.LogInformation(
                 "Hardware detected from system: {GpuType} with {VramGB}GB VRAM, {CpuCores} CPU cores, {RamGB}GB RAM",
                 systemProfile.GpuType, systemProfile.VramGB, systemProfile.CpuCores, systemProfile.RamGB);
@@ -128,10 +131,11 @@ public class HardwareDetector : IHardwareDetector
     {
         try
         {
-            // Try to query Ollama for system information
-            // Note: Ollama doesn't have a direct system info API, so we'll use process detection
+            // Try to detect hardware via system-level tools
+            // Note: Ollama doesn't expose a direct system info API; we rely on GPU tooling
+            // (e.g., nvidia-smi/rocm-smi) and OS queries to build a hardware profile.
             var (gpuType, vramGB) = await DetectGpuFromOllamaProcessAsync(cancellationToken);
-            
+
             return new HardwareProfile
             {
                 GpuType = gpuType,
@@ -306,18 +310,18 @@ public class HardwareDetector : IHardwareDetector
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Use WMI or fallback to approximate
-                // For now, return a default estimate
-                return 16.0;
+                // TODO: Use WMI to get total physical memory precisely.
+                // For now, return a default estimate to avoid blocking on Windows-specific implementation.
+                return DEFAULT_RAM_GB_ESTIMATE;
             }
 
             // Fallback estimate
-            return 16.0;
+            return DEFAULT_RAM_GB_ESTIMATE;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not detect system RAM, assuming 16GB");
-            return 16.0;
+            _logger.LogWarning(ex, "Could not detect system RAM, assuming {DefaultRam}GB", DEFAULT_RAM_GB_ESTIMATE);
+            return DEFAULT_RAM_GB_ESTIMATE;
         }
     }
 }
