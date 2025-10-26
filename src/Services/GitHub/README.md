@@ -360,25 +360,25 @@ docker run -p 5000:8080 -e GitHub__Token=your-token github-service
 
 ```bash
 cd src/Services/GitHub
-dotnet test
+dotnet test --verbosity quiet --nologo
 ```
 
 ### Run Unit Tests Only
 
 ```bash
-dotnet test --filter "Category=Unit"
+dotnet test --filter "Category=Unit" --verbosity quiet --nologo
 ```
 
 ### Run Integration Tests Only
 
 ```bash
-dotnet test --filter "Category=Integration"
+dotnet test --filter "Category=Integration" --verbosity quiet --nologo
 ```
 
 ### Run with Coverage
 
 ```bash
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test --collect:"XPlat Code Coverage" --verbosity quiet --nologo
 ```
 
 ## Architecture

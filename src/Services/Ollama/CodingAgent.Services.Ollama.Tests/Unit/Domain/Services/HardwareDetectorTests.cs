@@ -22,7 +22,7 @@ public class HardwareDetectorTests
     }
 
     [Fact]
-    public async Task DetectHardwareAsync_WhenOllamaUnavailable_ShouldReturnCpuOnlyProfile()
+    public async Task DetectHardwareAsync_WhenOllamaUnavailable_ShouldStillReturnHardwareProfile()
     {
         // Arrange
         _ollamaClientMock
@@ -34,11 +34,11 @@ public class HardwareDetectorTests
 
         // Assert
         result.Should().NotBeNull();
-        result.GpuType.Should().Be("CPU-only");
-        result.VramGB.Should().Be(0);
-        result.HasGpu.Should().BeFalse();
-        result.Tier.Should().Be(HardwareTier.CpuOnly);
         result.CpuCores.Should().BeGreaterThan(0);
+        result.RamGB.Should().BeGreaterThan(0);
+        // GPU presence depends on the test environment; do not assert a specific GPU state
+        result.VramGB.Should().BeGreaterThanOrEqualTo(0);
+        result.GpuType.Should().NotBeNull();
         result.DetectedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 

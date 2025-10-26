@@ -62,7 +62,7 @@ Implementation of integration tests and cloud API fallback infrastructure for th
   - **Branch coverage: 50.66%** for Ollama service
   - All public APIs covered with tests
   - All critical paths tested (configuration, fallback logic, token tracking)
-  - Coverage command: `dotnet test --collect:"XPlat Code Coverage"`
+   - Coverage command: `dotnet test --collect:"XPlat Code Coverage" --verbosity quiet --nologo`
   - Note: Coverage is focused on new code (cloud API, token tracking, integration tests)
   - Existing code (hardware detection, OllamaHttpClient) already had 85%+ coverage from Phase 1
 

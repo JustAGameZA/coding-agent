@@ -1,0 +1,15 @@
+# Platform mappings - use full runner images with pre-installed tools
+-P ubuntu-latest=ghcr.io/catthehacker/ubuntu:full-latest
+-P ubuntu-22.04=ghcr.io/catthehacker/ubuntu:full-22.04
+-P ubuntu-20.04=ghcr.io/catthehacker/ubuntu:full-20.04
+
+# Container settings
+--container-architecture linux/amd64
+
+# Skip cache action issues by using local cache
+--action-cache-path /tmp/act-cache
+
+# Environment optimizations
+--env DOTNET_SKIP_FIRST_TIME_EXPERIENCE=true
+--env DOTNET_CLI_TELEMETRY_OPTOUT=true
+--env CI=true

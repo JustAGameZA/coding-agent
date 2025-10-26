@@ -49,29 +49,14 @@ jobs:
 
       - name: Install Playwright browsers
         run: |
-          # Install PowerShell if not present
-          if ! command -v pwsh &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y powershell
-          fi
-          # Build the Browser service to get playwright.ps1
-          dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Release --no-restore
-          # Find and install Playwright browsers
-          PLAYWRIGHT_SCRIPT=$(find src/Services/Browser -name "playwright.ps1" -path "*/bin/Release/*" | head -n 1)
-          if [ -z "$PLAYWRIGHT_SCRIPT" ]; then
-            echo "Error: playwright.ps1 not found"
-            exit 1
-          fi
-          echo "Using Playwright script: $PLAYWRIGHT_SCRIPT"
-          pwsh "$PLAYWRIGHT_SCRIPT" install chromium firefox --with-deps
+          pwsh -Command "dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj"
+          pwsh -Command "src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/net9.0/playwright.ps1 install --with-deps"
 
-      - name: Test (Unit)
-        run: dotnet test CodingAgent.sln -c Release --no-build --filter "Category=Unit" --logger "trx;LogFileName=unit_test_results.trx"
-
-      - name: Test (Integration)
-        run: dotnet test CodingAgent.sln -c Release --no-build --filter "Category=Integration" --logger "trx;LogFileName=integration_test_results.trx"
+      - name: Test (Unit & Integration for Browser Service)
+        run: dotnet test src/Services/Browser/CodingAgent.Services.Browser.Tests/CodingAgent.Services.Browser.Tests.csproj --no-build --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
+        if: success()
         run: |
           set -e
           if [ -f src/Services/Browser/CodingAgent.Services.Browser/Dockerfile ]; then

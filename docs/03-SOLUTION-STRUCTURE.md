@@ -554,7 +554,7 @@ jobs:
         run: dotnet build src/Services/Chat/CodingAgent.Services.Chat.sln --no-restore
 
       - name: Test
-        run: dotnet test src/Services/Chat/CodingAgent.Services.Chat.sln --no-build --verbosity normal --collect:"XPlat Code Coverage"
+        run: dotnet test src/Services/Chat/CodingAgent.Services.Chat.sln --no-build --verbosity quiet --nologo --collect:"XPlat Code Coverage"
 
       - name: Check Coverage
         run: |
