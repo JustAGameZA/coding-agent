@@ -1,10 +1,15 @@
 using CodingAgent.Services.CICDMonitor.Api.Endpoints;
 using CodingAgent.Services.CICDMonitor.Application.Services;
 using CodingAgent.Services.CICDMonitor.Domain.Repositories;
+using CodingAgent.Services.CICDMonitor.Domain.Services;
+using CodingAgent.Services.CICDMonitor.Domain.Services.Implementation;
+using CodingAgent.Services.CICDMonitor.Infrastructure.ExternalServices;
 using CodingAgent.Services.CICDMonitor.Infrastructure.GitHub;
 using CodingAgent.Services.CICDMonitor.Infrastructure.Messaging.Consumers;
 using CodingAgent.Services.CICDMonitor.Infrastructure.Persistence;
+using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Infrastructure;
+using CodingAgent.SharedKernel.Infrastructure.Messaging;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
@@ -52,11 +57,11 @@ builder.Services.AddDbContext<CICDMonitorDbContext>(options =>
     }
 });
 
-// GitHub Client
-builder.Services.AddSingleton<IGitHubClient>(sp =>
+// Octokit GitHub Client (used by BuildMonitor)
+builder.Services.AddSingleton<Octokit.IGitHubClient>(sp =>
 {
     var githubToken = builder.Configuration["GitHub:Token"];
-    var client = new GitHubClient(new ProductHeaderValue("CodingAgent-CICDMonitor"));
+    var client = new Octokit.GitHubClient(new ProductHeaderValue("CodingAgent-CICDMonitor"));
     
     if (!string.IsNullOrEmpty(githubToken))
     {
@@ -68,6 +73,36 @@ builder.Services.AddSingleton<IGitHubClient>(sp =>
 
 // Repositories
 builder.Services.AddScoped<IBuildRepository, BuildRepository>();
+builder.Services.AddScoped<IBuildFailureRepository, BuildFailureRepository>();
+builder.Services.AddScoped<IFixAttemptRepository, FixAttemptRepository>();
+
+// Domain services
+builder.Services.AddScoped<IAutomatedFixService, AutomatedFixService>();
+
+// HTTP clients for external services
+builder.Services.AddHttpClient<CodingAgent.Services.CICDMonitor.Domain.Services.IOrchestrationClient, OrchestrationClient>(client =>
+{
+    var orchestrationUrl = builder.Configuration["ExternalServices:Orchestration:BaseUrl"] 
+        ?? "http://orchestration-service:5003";
+    client.BaseAddress = new Uri(orchestrationUrl);
+});
+
+builder.Services.AddHttpClient<CodingAgent.Services.CICDMonitor.Domain.Services.IGitHubClient, CodingAgent.Services.CICDMonitor.Infrastructure.ExternalServices.GitHubClient>(client =>
+{
+    var githubUrl = builder.Configuration["ExternalServices:GitHub:BaseUrl"] 
+        ?? "http://github-service:5004";
+    client.BaseAddress = new Uri(githubUrl);
+});
+
+// Event publisher abstraction
+if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Docker")
+{
+    builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
+}
+else
+{
+    builder.Services.AddScoped<IEventPublisher, NoOpEventPublisher>();
+}
 
 // Services
 builder.Services.AddSingleton<IGitHubActionsClient, GitHubActionsClient>();
@@ -79,6 +114,7 @@ builder.Services.AddHostedService<BuildMonitor>();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<TaskCompletedEventConsumer>();
+    x.AddConsumer<BuildFailedEventConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {
@@ -90,11 +126,10 @@ builder.Services.AddMassTransit(x =>
 // Add health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks();
 
-// Database health check
 var connectionString = builder.Configuration.GetConnectionString("CICDMonitorDb");
 if (!string.IsNullOrEmpty(connectionString))
 {
-    healthChecksBuilder.AddNpgSql(connectionString, name: "postgresql");
+    healthChecksBuilder.AddNpgSql(connectionString, name: "cicd_monitor_db");
 }
 
 // RabbitMQ health check if configured (only in Production to avoid dev package mismatches)
@@ -113,12 +148,12 @@ if (app.Environment.IsDevelopment() && runMigrations)
     var dbContext = scope.ServiceProvider.GetRequiredService<CICDMonitorDbContext>();
     await dbContext.Database.MigrateAsync();
 }
+// Map health endpoint
+app.MapHealthChecks("/health");
 
 // Map API endpoints
 app.MapBuildEndpoints();
-
-// Map health endpoint
-app.MapHealthChecks("/health");
+app.MapFixStatisticsEndpoints();
 
 // Map ping endpoint
 app.MapGet("/ping", () => Results.Ok(new

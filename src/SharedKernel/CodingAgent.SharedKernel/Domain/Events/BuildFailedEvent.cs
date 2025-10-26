@@ -49,7 +49,7 @@ public record BuildFailedEvent : IDomainEvent
     /// <summary>
     /// Gets the parsed error messages from the build logs.
     /// </summary>
-    public required IReadOnlyList<string> ErrorMessages { get; init; }
+    public required IReadOnlyList<string> ErrorMessages { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Gets the build conclusion (e.g., "failure", "cancelled").
@@ -65,4 +65,20 @@ public record BuildFailedEvent : IDomainEvent
     /// Gets the timestamp when the build failed.
     /// </summary>
     public required DateTime FailedAt { get; init; }
+
+    // Optional fields used by automated fix flow
+    /// <summary>
+    /// A representative error message extracted from the logs (optional).
+    /// </summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Full error log content, if available (optional).
+    /// </summary>
+    public string? ErrorLog { get; init; }
+
+    /// <summary>
+    /// The specific job name that failed (optional).
+    /// </summary>
+    public string? JobName { get; init; }
 }
