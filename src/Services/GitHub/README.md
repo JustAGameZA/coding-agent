@@ -19,6 +19,26 @@ The GitHub Service provides a REST API for interacting with GitHub repositories 
 - **Get Branch**: Retrieve details of a specific branch
 - **Delete Branch**: Remove a branch
 
+### Pull Request Operations
+- **Create Pull Request**: Create PRs with title, description, base, and head branches
+- **Get Pull Request**: Retrieve PR details by number
+- **List Pull Requests**: Get all PRs for a repository with optional state filter
+- **Merge Pull Request**: Merge PRs using merge, squash, or rebase strategies
+- **Close Pull Request**: Close PRs without merging
+- **Add Comment**: Post comments to PRs
+- **Request Review**: Request code review from specific users
+- **Approve Pull Request**: Approve a PR
+- **Automated Code Review**: Automatically analyze PRs and detect common issues
+
+### Automated Code Review
+- **Large PR Detection**: Warns when PRs exceed 50 files or 1000 lines
+- **Missing Tests Detection**: Identifies code changes without corresponding test updates
+- **Large File Detection**: Flags files with excessive changes (&gt;500 lines)
+- **Binary File Detection**: Warns about large binary files
+- **Empty Description Check**: Suggests adding PR descriptions
+- **Review Comments**: Posts detailed comments with suggestions
+- **Severity Levels**: Supports error, warning, and info severities
+
 ### Webhook Operations
 - **GitHub Webhook Handler**: Receive and process GitHub webhooks
 - **Signature Validation**: HMAC-SHA256 validation for webhook security
@@ -133,6 +153,117 @@ GET /repositories/{owner}/{repo}/branches/{branchName}
 DELETE /repositories/{owner}/{repo}/branches/{branchName}
 ```
 
+### Pull Request Endpoints
+
+#### Create Pull Request
+```http
+POST /pull-requests
+Content-Type: application/json
+
+{
+  "owner": "owner-name",
+  "repo": "repo-name",
+  "title": "Feature: Add new functionality",
+  "body": "## Description\nThis PR adds...",
+  "head": "feature-branch",
+  "base": "main",
+  "isDraft": false
+}
+```
+
+#### Get Pull Request
+```http
+GET /pull-requests/{owner}/{repo}/{number}
+```
+
+#### List Pull Requests
+```http
+GET /pull-requests/{owner}/{repo}?state=open
+```
+
+Query Parameters:
+- `state`: Filter by state (`open`, `closed`, `all`)
+
+#### Merge Pull Request
+```http
+POST /pull-requests/{owner}/{repo}/{number}/merge
+Content-Type: application/json
+
+{
+  "mergeMethod": "squash",
+  "commitTitle": "Feature: Add new functionality",
+  "commitMessage": "Implements feature XYZ"
+}
+```
+
+Merge Methods:
+- `merge`: Standard merge commit
+- `squash`: Squash all commits into one
+- `rebase`: Rebase and merge
+
+#### Close Pull Request
+```http
+POST /pull-requests/{owner}/{repo}/{number}/close
+```
+
+#### Add Comment to Pull Request
+```http
+POST /pull-requests/{owner}/{repo}/{number}/comments
+Content-Type: application/json
+
+{
+  "body": "This looks great! LGTM."
+}
+```
+
+#### Request Review
+```http
+POST /pull-requests/{owner}/{repo}/{number}/request-review
+Content-Type: application/json
+
+{
+  "reviewers": ["reviewer1", "reviewer2"]
+}
+```
+
+#### Approve Pull Request
+```http
+POST /pull-requests/{owner}/{repo}/{number}/approve
+Content-Type: application/json
+
+{
+  "body": "Approved! Great work."
+}
+```
+
+#### Automated Code Review
+```http
+POST /pull-requests/{owner}/{repo}/{number}/review
+```
+
+Response:
+```json
+{
+  "requestChanges": false,
+  "summary": "🤖 **Automated Code Review**\n\n### Summary...",
+  "issues": [
+    {
+      "severity": "warning",
+      "issueType": "missing_tests",
+      "filePath": "",
+      "lineNumber": null,
+      "description": "No test files were modified...",
+      "suggestion": "Add unit tests..."
+    }
+  ]
+}
+```
+
+#### Get PR Template
+```http
+GET /pull-requests/template
+```
+
 ### Webhook Endpoints
 
 #### GitHub Webhook Handler
@@ -165,6 +296,7 @@ X-GitHub-Delivery: <delivery-id>
 - `GitHubPushEvent` - When push webhook received
 - `GitHubPullRequestEvent` - When PR webhook received
 - `GitHubIssueEvent` - When issue/comment webhook received
+- `PullRequestCreatedEvent` - When PR is created via API
 
 ### Health & Monitoring
 
@@ -192,6 +324,7 @@ The service uses GitHub Personal Access Tokens (PAT) for authentication. Configu
 For full functionality, your token should have these scopes:
 - `repo` - Full control of private repositories
 - `delete_repo` - Delete repositories (for delete operations)
+- `write:discussion` - Read/write access to pull requests and reviews
 
 ### Webhook Setup
 
@@ -255,15 +388,18 @@ The service follows Clean Architecture principles:
 ```
 CodingAgent.Services.GitHub/
 ├── Domain/
-│   ├── Entities/           # Repository, Branch entities
-│   ├── Services/           # IGitHubService, IWebhookService interfaces
+│   ├── Entities/           # Repository, Branch, PullRequest entities
+│   ├── Services/           # IGitHubService, IWebhookService, ICodeReviewService interfaces
 │   └── Webhooks/           # Webhook payload models
 ├── Infrastructure/
 │   ├── GitHubService.cs    # Octokit implementation
+│   ├── CodeReviewService.cs # Automated code review
 │   ├── WebhookService.cs   # Webhook processing
 │   └── WebhookValidator.cs # HMAC signature validation
-└── Api/
-    └── Endpoints/          # Minimal API endpoints
+├── Api/
+│   └── Endpoints/          # Minimal API endpoints
+└── Templates/
+    └── PullRequestTemplate.md # Default PR template
 ```
 
 ## Error Handling
@@ -309,7 +445,9 @@ Distributed tracing via OpenTelemetry with OTLP exporter to Jaeger/Zipkin.
 ## Test Coverage
 
 The service includes comprehensive test coverage:
-- **Unit Tests**: 28 tests covering domain logic and infrastructure
+- **Unit Tests**: 54 tests covering domain logic and infrastructure
+  - Pull Request operations (19 tests)
+  - Code review service (7 tests)
   - WebhookValidator (7 tests)
   - WebhookService (8 tests)
   - Repository operations (7 tests)
@@ -317,25 +455,25 @@ The service includes comprehensive test coverage:
 - **Integration Tests**: 10 tests covering HTTP endpoints
   - Webhook endpoints (7 tests)
   - Health/Ping endpoints (3 tests)
-- **Total**: 38 tests with 85%+ code coverage
+- **Total**: 64 tests with 85%+ code coverage
 
 ## Limitations
 
 - No pagination support (returns all results)
-- No pull request operations
 - No issue management
 - Basic error messages (no retry logic)
 
 ## Future Enhancements
 
 1. Add pagination support for list operations
-2. Add pull request creation/management
-3. Add issue management operations
-4. Implement retry logic with exponential backoff
-5. Add rate limit monitoring and handling
-6. Support for GitHub Apps authentication
-7. Caching layer for frequently accessed data
-8. Webhook event filtering and routing
+2. Add issue management operations
+3. Implement retry logic with exponential backoff
+4. Add rate limit monitoring and handling
+5. Support for GitHub Apps authentication
+6. Caching layer for frequently accessed data
+7. Webhook event filtering and routing
+8. Enhanced code review rules (code quality, security scans)
+9. Integration with external code analysis tools
 
 ## Contributing
 
