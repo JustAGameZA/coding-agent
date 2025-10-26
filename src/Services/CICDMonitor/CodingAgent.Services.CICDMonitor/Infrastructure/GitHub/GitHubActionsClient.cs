@@ -181,7 +181,14 @@ public class GitHubActionsClient : IGitHubActionsClient
             CreatedAt = workflowRun.CreatedAt.UtcDateTime,
             UpdatedAt = workflowRun.UpdatedAt.UtcDateTime,
             StartedAt = workflowRun.RunStartedAt.UtcDateTime,
-            CompletedAt = null, // Octokit v13 has no CompletedAt; see BuildFailedEvent fallback
+            /*
+             * Octokit v13 does not expose WorkflowRun.CompletedAt even though the REST API includes it.
+             * We deliberately set CompletedAt = null here to avoid guessing. Downstream consumers must
+             * handle nulls and, if needed, derive duration using (UpdatedAt - StartedAt) or compute a
+             * fallback at the edge (e.g., when emitting a terminal failure event). Any such fallback
+             * should be documented alongside the code invoking it to make accuracy trade-offs explicit.
+             */
+            CompletedAt = null,
             ErrorMessages = new List<string>()
         };
     }
