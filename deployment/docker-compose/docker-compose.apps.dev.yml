@@ -80,13 +80,13 @@ services:
     container_name: coding-agent-chat-dev
     working_dir: /workspace/src/Services/Chat/CodingAgent.Services.Chat
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5001"
+      bash -lc "rm -rf obj bin && dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5001"
     ports:
       - "5001:5001"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5001"
-      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_USE_POLLING_FILE_WATCHER: "false"
       ConnectionStrings__ChatDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       RabbitMQ__Host: rabbitmq
@@ -205,13 +205,14 @@ services:
     container_name: coding-agent-cicd-monitor-dev
     working_dir: /workspace/src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
+      bash -lc "rm -rf obj bin /workspace/src/SharedKernel/CodingAgent.SharedKernel/obj/project.assets.json.lock && dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
     ports:
       - "5006:5006"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5006"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       ConnectionStrings__CICDMonitorDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-codingagent};Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
       GitHub__Token: "${GITHUB_TOKEN:-}"
       RabbitMQ__Host: rabbitmq
