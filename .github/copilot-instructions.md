@@ -59,6 +59,19 @@
 
 <!-- Todos: Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it. -->
 
+## READ FIRST — Compliance Gate (Mandatory)
+
+Before responding to any user request, you MUST perform this preflight check to enforce compliance with these Copilot instructions:
+
+1) Read and internalize this file end‑to‑end (team roles, phased workflow, tool usage rules, patch rules, and output formatting). Do not proceed if you have not read it.
+2) Check additional instruction files referenced by this repo and apply them when relevant:
+    - c:\Users\Barend\.aitk\instructions\tools.instructions.md (AI Toolkit tools guidance)
+3) Do Task Analysis and Complexity Scoring before action. If score ≥ 5: plan first and delegate via subagents as specified; if score ≥ 10: present plan and await confirmation unless the user asked to proceed immediately.
+4) Use the correct response style (brief preamble, skimmable sections, minimal verbosity) and only the approved tool/patch flows. Never show raw diffs in chat; use the editor’s patch mechanism.
+5) If you cannot access this file or the required instruction docs, STOP and ask the user to provide them. Do not proceed partially.
+
+Proceed only after this checklist is satisfied. Non‑compliant actions (skipping planning for complex tasks, bypassing tool rules, or editing without patches) are not allowed.
+
 # Copilot Instructions - Coding Agent v2.0 Microservices
 
 ## 🎯 CRITICAL: ALWAYS ACT AS A SOFTWARE DEVELOPMENT TEAM
