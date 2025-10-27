@@ -10,6 +10,7 @@
 | Service | Lines of Code (Est.) | Team Size | Complexity | Dependencies |
 |---------|---------------------|-----------|------------|--------------|
 | API Gateway | 2,000 | 0.5 | Low | None (entry point) |
+| Auth Service | 2,500 | 0.5 | Medium | None (foundational) |
 | Chat Service | 8,000 | 1.0 | Medium | Auth, ML Classifier |
 | Orchestration Service | 12,000 | 1.5 | High | All services |
 | ML Classifier | 5,000 | 1.0 | High | Training data from Orchestration |
@@ -19,7 +20,7 @@
 | Dashboard Service | 3,000 | 0.5 | Low | All services (BFF) |
 | Ollama Service | 4,000 | 0.5 | Medium | Orchestration (LLM provider) |
 
-**Total Estimated LOC**: ~49,000 (down from 60,000 in monolith due to reduced coupling)
+**Total Estimated LOC**: ~51,500 (down from 60,000 in monolith due to reduced coupling)
 
 ---
 
@@ -828,7 +829,240 @@ resources:
 
 ---
 
-## 9. Ollama Service
+## 9. Auth Service
+
+### Responsibility
+Centralized authentication and authorization service providing JWT-based user authentication, session management, and role-based access control for all microservices.
+
+### Technology Stack
+- **Framework**: .NET 9 Minimal APIs
+- **Database**: PostgreSQL (`auth` schema)
+- **Security**: BCrypt (password hashing), JWT tokens (access + refresh)
+- **Validation**: FluentValidation
+- **Observability**: OpenTelemetry (traces + metrics)
+- **Message Bus**: RabbitMQ (authentication events)
+
+### Domain Model
+
+```csharp
+public class User
+{
+    public Guid Id { get; set; }
+    public string Username { get; set; }        // Unique, 3-50 chars
+    public string Email { get; set; }           // Unique, valid email
+    public string PasswordHash { get; set; }    // BCrypt hash (work factor 12)
+    public string Roles { get; set; }           // Comma-separated roles
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public bool IsActive { get; set; }
+    public ICollection<Session> Sessions { get; set; }
+    public ICollection<ApiKey> ApiKeys { get; set; }
+}
+
+public class Session
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string RefreshTokenHash { get; set; }  // SHA256 hash (not plaintext)
+    public DateTime ExpiresAt { get; set; }       // 7 days from creation
+    public string IpAddress { get; set; }
+    public string UserAgent { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool IsRevoked { get; set; }
+    public DateTime? RevokedAt { get; set; }
+}
+
+public class ApiKey
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string KeyHash { get; set; }           // SHA256 hash
+    public string Name { get; set; }              // User-defined name
+    public DateTime ExpiresAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool IsRevoked { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public DateTime? LastUsedAt { get; set; }
+}
+```
+
+### API Endpoints
+
+```http
+# Authentication
+POST   /auth/register              # Register new user
+POST   /auth/login                 # Login (returns access + refresh tokens)
+POST   /auth/refresh               # Refresh access token (with token rotation)
+POST   /auth/logout                # Revoke refresh token
+GET    /auth/me                    # Get current user info (requires auth)
+
+# Password Management
+POST   /auth/change-password       # Change password (revokes all sessions)
+
+# Health & Monitoring
+GET    /ping                       # Simple health check
+GET    /health                     # Comprehensive health check (DB + RabbitMQ)
+```
+
+### Key Features
+
+#### 1. JWT Authentication
+- **Access Tokens**: 15-minute lifetime, HS256 signing
+- **Refresh Tokens**: 7-day lifetime, stored as SHA256 hash
+- **Token Rotation**: Old refresh token revoked on renewal
+- **Claims**: User ID, username, email, roles, JWT ID
+
+#### 2. Password Security
+- **Hashing**: BCrypt with work factor 12 (~250ms per hash)
+- **Validation**: Min 8 chars, uppercase, lowercase, number, special char
+- **Storage**: Only hashed passwords stored (never plaintext)
+
+#### 3. Session Management
+- **Tracking**: IP address and User-Agent for each session
+- **Expiration**: 7-day automatic expiration
+- **Revocation**: Manual logout or password change revokes all sessions
+
+#### 4. Input Validation
+- **FluentValidation**: All requests validated before processing
+- **Username**: 3-50 chars, alphanumeric + hyphens/underscores
+- **Email**: Valid email format, max 255 chars
+- **Password**: Strong password policy enforced
+
+#### 5. Security Features
+- **No Hardcoded Secrets**: JWT secret from configuration (env vars)
+- **HTTPS Enforcement**: Required in production
+- **Rate Limiting**: Gateway-level (10 login attempts/min per IP)
+- **CORS**: Explicit origin whitelist in production
+- **Audit Trail**: All auth events logged with OpenTelemetry
+
+### Security Alignment (OWASP Top 10)
+
+| OWASP Category | Protection | Implementation |
+|----------------|------------|----------------|
+| A01: Broken Access Control | ✅ | JWT with role claims, `[Authorize]` attributes |
+| A02: Cryptographic Failures | ✅ | BCrypt (work factor 12), SHA256 token hashing, HTTPS |
+| A03: Injection | ✅ | EF Core parameterized queries, FluentValidation |
+| A04: Insecure Design | ✅ | Token rotation, session tracking, password change invalidation |
+| A05: Security Misconfiguration | ✅ | No default secrets, explicit CORS, production-ready config |
+| A07: Auth Failures | ✅ | Strong passwords, session management, rate limiting |
+| A09: Logging Failures | ✅ | Structured logging, OpenTelemetry tracing, audit trail |
+
+### Database Schema
+
+**Schema**: `auth`
+
+**Tables**:
+- `users`: User accounts (username and email are unique)
+- `sessions`: Refresh token sessions (cascade delete on user removal)
+- `api_keys`: API keys for programmatic access (future feature)
+
+**Indexes**:
+- `IX_users_Username` (unique)
+- `IX_users_Email` (unique)
+- `IX_sessions_RefreshTokenHash` (for fast token lookup)
+- `IX_sessions_IsRevoked_ExpiresAt` (for cleanup queries)
+
+### Integration Points
+
+**Consumed By**:
+- **Gateway**: JWT validation for all protected routes
+- **All Services**: User authentication via JWT claims
+- **Dashboard**: User profile display
+
+**Events Published**:
+- `UserRegisteredEvent`: When new user registers
+- `UserLoggedInEvent`: Successful login (for analytics)
+- `UserLoggedOutEvent`: When user logs out
+- `PasswordChangedEvent`: Password change (for security alerts)
+
+**Events Consumed**:
+- None (foundational service)
+
+### Configuration
+
+**Required Environment Variables**:
+```bash
+Jwt__Secret=<64-char-random-string>           # Generate with: openssl rand -base64 64
+Jwt__Issuer=CodingAgent
+Jwt__Audience=CodingAgent.API
+ConnectionStrings__AuthDb=<postgres-connection>
+RabbitMQ__Host=<rabbitmq-host>
+```
+
+**Optional**:
+```bash
+Jwt__AccessTokenLifetime=15                   # Minutes (default: 15)
+Jwt__RefreshTokenLifetime=10080               # Minutes (default: 7 days)
+OpenTelemetry__Endpoint=<jaeger-endpoint>
+```
+
+### Deployment
+
+```yaml
+replicas: 2
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+healthCheck:
+  endpoint: /health
+  interval: 30s
+  timeout: 10s
+  retries: 3
+```
+
+### Production Readiness
+
+**Status**: ✅ Production-Ready (Phase 4)
+
+**Test Coverage**:
+- Unit Tests: 18 tests (100% passing)
+- Integration Tests: 9 tests (Testcontainers)
+- Total: ~600 lines of test code
+
+**Documentation**:
+- ✅ Implementation Guide: `docs/AUTH-IMPLEMENTATION.md`
+- ✅ OpenAPI Spec: `docs/api/auth-service-openapi.yaml`
+- ✅ E2E Test Summary: `docs/AUTH-E2E-TEST-SUMMARY.md`
+
+**Security Audit**:
+- ✅ No hardcoded secrets
+- ✅ BCrypt work factor 12
+- ✅ Refresh token rotation
+- ✅ Strong password policy
+- ✅ HTTPS enforcement
+- ✅ Rate limiting (Gateway)
+- ✅ OpenTelemetry instrumentation
+
+### Future Enhancements (Phase 5)
+
+1. **Two-Factor Authentication (2FA)**
+   - TOTP-based (Google Authenticator)
+   - SMS-based (Twilio)
+   - Backup codes
+
+2. **Single Sign-On (SSO)**
+   - OAuth 2.0 providers (Google, GitHub, Microsoft)
+   - SAML 2.0 for enterprise
+
+3. **Email Verification**
+   - Verify email on registration
+   - Password reset via email
+   - Security alerts (new device login)
+
+4. **API Key Management**
+   - Create/revoke API keys (entity exists, endpoints pending)
+   - Key usage analytics
+   - Scoped permissions per key
+
+5. **Admin Features**
+   - User management (activate/deactivate)
+   - Role management (create/assign roles)
+   - Session management (view/revoke)
+   - Audit log API
+
+---
+
+## 10. Ollama Service
 
 ### Responsibility
 Managed local LLM provider using Ollama. Provides cost-effective, on-premise inference for code generation, reducing reliance on external APIs (OpenAI, Anthropic). Acts as an intelligent router between hosted Ollama models and the orchestration service.

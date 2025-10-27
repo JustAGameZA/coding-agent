@@ -9,9 +9,9 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
-{
-    [DbContext(typeof(AuthDbContext))]
+namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations;
+
+[DbContext(typeof(AuthDbContext))]
     [Migration("20251027144440_InitialCreate")]
     partial class InitialCreate
     {
@@ -203,4 +203,3 @@ namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
 #pragma warning restore 612, 618
         }
     }
-}

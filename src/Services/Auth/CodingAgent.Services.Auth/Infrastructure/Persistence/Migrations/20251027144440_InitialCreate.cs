@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
-{
-    /// <inheritdoc />
-    public partial class InitialCreate : Migration
+namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations;
+
+/// <inheritdoc />
+public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -152,6 +152,5 @@ namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
             migrationBuilder.DropTable(
                 name: "users",
                 schema: "auth");
-        }
     }
 }
