@@ -96,17 +96,33 @@ else if (builder.Environment.IsProduction())
     throw new InvalidOperationException("JWT:Secret is required in Production environment");
 }
 
-// MassTransit + RabbitMQ
+// MassTransit Transport
+// Use RabbitMQ only when fully configured; otherwise fall back to in-memory transport (ideal for tests & local dev without a broker)
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
     x.AddConsumers(typeof(Program).Assembly);
 
-    x.UsingRabbitMq((context, cfg) =>
+    // Enable RabbitMQ only when explicitly enabled or in Production
+    var rabbitEnabled = builder.Configuration.GetValue<bool?>("RabbitMQ:Enabled")
+        ?? builder.Environment.IsProduction();
+    var rabbitConfigured = builder.Configuration.IsRabbitMQConfigured();
+
+    if (rabbitEnabled && rabbitConfigured)
     {
-        cfg.ConfigureRabbitMQHost(builder.Configuration, builder.Environment);
-        cfg.ConfigureEndpoints(context);
-    });
+        x.UsingRabbitMq((context, cfg) =>
+        {
+            cfg.ConfigureRabbitMQHost(builder.Configuration, builder.Environment);
+            cfg.ConfigureEndpoints(context);
+        });
+    }
+    else
+    {
+        x.UsingInMemory((context, cfg) =>
+        {
+            cfg.ConfigureEndpoints(context);
+        });
+    }
 });
 
 // Health Checks
