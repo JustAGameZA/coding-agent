@@ -300,7 +300,15 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseAuthorization();
+// IMPORTANT: Apply authorization only for non-auth routes.
+// Auth endpoints (/api/auth/*) must allow anonymous access for login/register/refresh.
+// Using a branch avoids unintended 401 challenges on those paths.
+app.UseWhen(context =>
+    !context.Request.Path.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase),
+    subApp =>
+    {
+        subApp.UseAuthorization();
+    });
 
 // Expose Prometheus scraping endpoint
 app.MapPrometheusScrapingEndpoint("/metrics");
