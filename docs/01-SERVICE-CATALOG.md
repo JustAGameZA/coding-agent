@@ -326,6 +326,7 @@ public enum ExecutionStrategy
 POST   /tasks                    # Create new task
 GET    /tasks                    # List tasks (paginated)
 GET    /tasks/{id}               # Get task details
+POST   /tasks/{id}/execute       # Execute task (optional overrides supported)
 PUT    /tasks/{id}/cancel        # Cancel running task
 POST   /tasks/{id}/retry         # Retry failed task
 GET    /tasks/{id}/executions    # Get execution history
@@ -363,6 +364,35 @@ GET    /strategies               # List available execution strategies
 6. **Rollback Support**: Undo changes on failure
 7. **SAGA Pattern**: Distributed transactions across services
 
+### Execute API – overrides (forceStrategy, maxParallelSubagents)
+
+Clients can optionally override strategy selection and limit the degree of parallelism for MultiAgent runs.
+
+Request body (optional fields):
+
+```json
+{
+  "forceStrategy": "Iterative",            
+  "maxParallelSubagents": 3                  
+}
+```
+
+- forceStrategy (optional): one of ["SingleShot", "Iterative", "MultiAgent"].
+  - When provided, the orchestrator uses this strategy instead of auto-selection by complexity/classifier.
+  - If the strategy is incompatible with the task (e.g., SingleShot for an Epic task), the request is rejected with 400 and a validation message.
+- maxParallelSubagents (optional, integer 1–10): upper bound of concurrently running subagents for MultiAgent execution.
+  - Ignored for SingleShot/Iterative.
+  - If omitted, defaults to the service configuration value Orchestration.MaxParallelSubagents.
+
+Responses:
+- 202 Accepted with an execution resource reference when execution is queued/started.
+- 400 Bad Request on validation failure (invalid strategy value, out-of-range parallelism, task not eligible).
+- 409 Conflict if the task is already running.
+- 404 Not Found if the task id does not exist or is not visible to the caller.
+
+Notes:
+- SSE logs support an optional `executionId` query parameter to stream a specific execution; otherwise the latest execution is streamed.
+
 ### Events Published
 
 ```csharp
@@ -377,6 +407,7 @@ public record TaskFailedEvent(Guid TaskId, string Error);
 {
   "Orchestration": {
     "MaxConcurrentTasks": 10,
+    "MaxParallelSubagents": 3,
     "DefaultStrategy": "Iterative",
     "MaxRetries": 3,
     "RetryDelaySeconds": [5, 15, 60],

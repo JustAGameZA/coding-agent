@@ -39,9 +39,36 @@ public class GitHubActionsClient : IGitHubActionsClient
                 owner,
                 repository);
 
-            var workflowRuns = await _client.Actions.Workflows.Runs.List(
-                owner,
-                repository);
+            // Retry on transient network failures (connection reset, DNS, transient TLS issues)
+            const int maxAttempts = 3;
+            int attempt = 0;
+            WorkflowRunsResponse workflowRuns = null!;
+
+            while (attempt < maxAttempts)
+            {
+                attempt++;
+                try
+                {
+                    workflowRuns = await _client.Actions.Workflows.Runs.List(
+                        owner,
+                        repository);
+                    break;
+                }
+                catch (Exception ex) when (IsTransient(ex))
+                {
+                    _logger.LogWarning(ex, "Transient error fetching workflow runs (attempt {Attempt}/{Max}) for {Owner}/{Repository}", attempt, maxAttempts, owner, repository);
+                    if (attempt >= maxAttempts)
+                    {
+                        _logger.LogError(ex, "Exceeded retry attempts fetching workflow runs for {Owner}/{Repository}", owner, repository);
+                        throw new InvalidOperationException($"Failed to fetch workflow runs after {maxAttempts} attempts: {ex.Message}", ex);
+                    }
+
+                    // Exponential backoff with jitter
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(new Random().Next(100, 500));
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+            }
 
             var builds = workflowRuns.WorkflowRuns.Select(MapToBuild).ToList();
 
@@ -83,11 +110,36 @@ public class GitHubActionsClient : IGitHubActionsClient
                 owner,
                 repository);
 
-            // Get workflow run jobs to access logs
-            var jobs = await _client.Actions.Workflows.Jobs.List(
-                owner,
-                repository,
-                workflowRunId);
+            // Get workflow run jobs to access logs (with transient retry)
+            const int maxAttempts = 3;
+            int attempt = 0;
+            WorkflowJobsResponse jobs = null!;
+
+            while (attempt < maxAttempts)
+            {
+                attempt++;
+                try
+                {
+                    jobs = await _client.Actions.Workflows.Jobs.List(
+                        owner,
+                        repository,
+                        workflowRunId);
+                    break;
+                }
+                catch (Exception ex) when (IsTransient(ex))
+                {
+                    _logger.LogWarning(ex, "Transient error fetching workflow run jobs (attempt {Attempt}/{Max}) for {Owner}/{Repository} run {RunId}", attempt, maxAttempts, owner, repository, workflowRunId);
+                    if (attempt >= maxAttempts)
+                    {
+                        _logger.LogError(ex, "Exceeded retry attempts fetching workflow run jobs for {Owner}/{Repository} run {RunId}", owner, repository, workflowRunId);
+                        throw new InvalidOperationException($"Failed to fetch workflow run jobs after {maxAttempts} attempts: {ex.Message}", ex);
+                    }
+
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)) + TimeSpan.FromMilliseconds(new Random().Next(100, 500));
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+            }
 
             var errorMessages = new List<string>();
 
@@ -131,6 +183,27 @@ public class GitHubActionsClient : IGitHubActionsClient
                 $"Failed to fetch workflow run logs: {ex.Message}",
                 ex);
         }
+    }
+
+    /// <summary>
+    /// Heuristic check for transient exceptions that are safe to retry.
+    /// </summary>
+    private static bool IsTransient(Exception ex)
+    {
+        if (ex is System.Net.Http.HttpRequestException)
+            return true;
+
+        if (ex is System.IO.IOException)
+            return true;
+
+        if (ex is TaskCanceledException)
+            return true;
+
+        // Inspect inner exceptions for socket / connection reset
+        if (ex.InnerException != null)
+            return IsTransient(ex.InnerException);
+
+        return false;
     }
 
     /// <summary>

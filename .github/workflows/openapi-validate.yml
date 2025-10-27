@@ -1,0 +1,29 @@
+name: OpenAPI Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/api/**'
+      - '.spectral.yaml'
+      - '.github/workflows/openapi-validate.yml'
+  push:
+    branches: [ master ]
+    paths:
+      - 'docs/api/**'
+      - '.spectral.yaml'
+
+jobs:
+  spectral-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Lint OpenAPI specs (Spectral)
+        run: |
+          npx -y @stoplight/spectral-cli@6 lint "docs/api/*.yaml" --quiet

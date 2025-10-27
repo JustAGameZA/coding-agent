@@ -1,6 +1,9 @@
 import { Injectable, signal } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { environment } from '../../../environments/environment';
+import { AuthService } from './auth.service';
+import type { RetryContext } from '@microsoft/signalr';
+import { NotificationService } from './notifications/notification.service';
 
 @Injectable({
   providedIn: 'root'
@@ -13,8 +16,9 @@ export class SignalRService {
     signalR.HubConnectionState.Disconnected
   );
   public isConnected = signal<boolean>(false);
+  public nextRetryDelayMs = signal<number | null>(null);
 
-  constructor() {
+  constructor(private auth: AuthService, private notify: NotificationService) {
     this.initializeConnection();
   }
 
@@ -22,12 +26,23 @@ export class SignalRService {
    * Initialize SignalR hub connection
    */
   private initializeConnection(): void {
+    const retrySeq = [0, 2000, 5000, 10000, 20000, 30000];
+    const retryPolicy = {
+      nextRetryDelayInMilliseconds: (ctx: RetryContext) => {
+        const idx = Math.min(ctx.previousRetryCount, retrySeq.length - 1);
+        const delay = retrySeq[idx];
+        this.nextRetryDelayMs.set(delay);
+        return delay;
+      }
+    } as signalR.IRetryPolicy;
+
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl(environment.signalRUrl, {
+      .withUrl(environment.chatHubUrl || environment.signalRUrl, {
         skipNegotiation: true,
-        transport: signalR.HttpTransportType.WebSockets
+        transport: signalR.HttpTransportType.WebSockets,
+        accessTokenFactory: () => this.auth.getToken() || ''
       })
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(retryPolicy)
       .configureLogging(signalR.LogLevel.Information)
       .build();
 
@@ -35,16 +50,24 @@ export class SignalRService {
     this.hubConnection.onreconnecting(() => {
       this.connectionState.set(signalR.HubConnectionState.Reconnecting);
       this.isConnected.set(false);
+      this.notify.info('Connection lost. Reconnecting...');
     });
 
     this.hubConnection.onreconnected(() => {
       this.connectionState.set(signalR.HubConnectionState.Connected);
       this.isConnected.set(true);
+      this.nextRetryDelayMs.set(null);
+      this.notify.info('Reconnected');
     });
 
-    this.hubConnection.onclose(() => {
+    this.hubConnection.onclose((err) => {
       this.connectionState.set(signalR.HubConnectionState.Disconnected);
       this.isConnected.set(false);
+      this.nextRetryDelayMs.set(null);
+      this.notify.error('Disconnected from chat');
+      if (err) {
+        console.error('SignalR closed with error', err);
+      }
     });
   }
 
@@ -123,5 +146,22 @@ export class SignalRService {
     if (this.hubConnection) {
       this.hubConnection.off(methodName);
     }
+  }
+
+  // Convenience methods for Chat Hub
+  public async joinConversation(conversationId: string): Promise<void> {
+    await this.invoke('JoinConversation', conversationId);
+  }
+
+  public async leaveConversation(conversationId: string): Promise<void> {
+    await this.invoke('LeaveConversation', conversationId);
+  }
+
+  public async sendMessage(conversationId: string, content: string): Promise<void> {
+    await this.invoke('SendMessage', conversationId, content);
+  }
+
+  public async typingIndicator(conversationId: string, isTyping: boolean): Promise<void> {
+    await this.invoke('TypingIndicator', conversationId, isTyping);
   }
 }

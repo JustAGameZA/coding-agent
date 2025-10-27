@@ -16,8 +16,8 @@ Central index for OpenAPI specifications for all services. Each service must pro
 
 ## Specs
 
-- Gateway: docs/api/gateway-openapi.yaml (TBD)
-- Chat Service: docs/api/chat-service-openapi.yaml (TBD)
+- Gateway: [api/gateway-openapi.yaml](api/gateway-openapi.yaml)
+- Chat Service: [api/chat-service-openapi.yaml](api/chat-service-openapi.yaml)
 - Orchestration Service: docs/api/orchestration-service-openapi.yaml (TBD)
 - ML Classifier: docs/api/ml-classifier-openapi.yaml (TBD)
 - GitHub Service: docs/api/github-service-openapi.yaml (TBD)
@@ -36,6 +36,10 @@ Central index for OpenAPI specifications for all services. Each service must pro
 
 - [ ] Create initial Gateway OpenAPI (routes + health/metrics)
 - [ ] Add Chat Service endpoints
+	- Presence: GET /presence/{conversationId}
+		- Description: Returns presence for participants in the conversation
+		- Response: [{ userId: string (GUID), isOnline: boolean, lastSeenUtc: string|null }]
+		- Notes: Participants approximated from recent messages until participant list is available
 - [ ] Add Orchestration Service endpoints
 - [ ] Add ML Classifier endpoints
 - [ ] Wire CI to validate OpenAPI (spectral)

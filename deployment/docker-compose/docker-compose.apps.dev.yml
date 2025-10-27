@@ -180,6 +180,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5006"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      ConnectionStrings__CICDMonitorDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-codingagent};Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      GitHub__Token: "${GITHUB_TOKEN:-}"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
@@ -188,6 +190,7 @@ services:
       - ../../:/workspace
       - nuget-packages:/root/.nuget/packages
     depends_on:
+      - postgres
       - rabbitmq
     networks:
       - coding-agent
@@ -251,9 +254,8 @@ services:
     container_name: coding-agent-ml-classifier-dev
     working_dir: /app
     command: >-
-      bash -lc "pip install --upgrade pip && \
-      (test -f requirements.txt && pip install -r requirements.txt || true) && \
-      pip install uvicorn[standard] && \
+      bash -c "pip install --upgrade pip && \
+      pip install -r requirements.txt && \
       uvicorn main:app --reload --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
@@ -274,7 +276,7 @@ services:
     container_name: coding-agent-dashboard-ui-dev
     working_dir: /workspace
     command: >-
-      bash -lc "npm ci && npx ng serve --host 0.0.0.0 --port 4200 --poll 500"
+      bash -lc "npm ci && npx ng serve --host 0.0.0.0 --port 4200 --poll 2000"
     ports:
       - "4200:4200"
     environment:
@@ -285,5 +287,11 @@ services:
       - npm-cache:/root/.npm
     networks:
       - coding-agent
+    # Reduce CPU usage - Angular barely implemented, hot reload less critical
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
 
   # (No infra services here; run together with infra compose via -f)

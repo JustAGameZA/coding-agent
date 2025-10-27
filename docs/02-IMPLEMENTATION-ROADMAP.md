@@ -27,7 +27,7 @@
 - ✅ 141 unit tests passing with trait categorization
 - ✅ SignalR hub implemented and mapped at `/hubs/chat`
 - ✅ Integration tests with Testcontainers
-- 🔜 Outstanding: SignalR hub auth + presence tracking, file attachments
+- 🔜 Outstanding: SignalR hub auth + presence tracking
 
 **Orchestration Service** ✅
 - ✅ Task domain model implemented (#89)
@@ -277,6 +277,8 @@ Prerequisite: Phase 1 (Infrastructure & Gateway) deliverables complete. ✅
 **Remaining Work:**
 - SignalR hub auth + presence tracking
 - File attachments (multipart upload + storage)
+   - Status: Implemented on backend and wired in frontend with progress bar and inline thumbnails
+   - Frontend: `ChatService.uploadAttachmentWithProgress`, `ChatThreadComponent` thumbnails, `ChatComponent` progress bar
 
 **Days 1-2: Domain Model & Repository**
 - ✅ Implement entities (Conversation, Message)
@@ -713,6 +715,19 @@ Fix bugs, optimize performance, complete documentation.
 
 **Outstanding Phase 2/3 Items (Low Priority)**
 - Chat: SignalR hub authentication + presence tracking, file attachments (multipart + storage)
+  - Frontend wiring complete for file attachments; presence UI scaffolded (online count, reconnect countdown); awaiting backend presence endpoints
+
+### Frontend Chat – How to Run
+
+1. Install dependencies:
+   - From `src/Frontend/coding-agent-dashboard` run `npm ci` (or `npm install`)
+2. Development server:
+   - `npm start` and navigate to `http://localhost:4200`
+3. Build:
+   - `npm run build`
+4. Notes:
+   - Configure API base and chat hub URLs in `src/environments/environment.ts`
+   - JWT is read from `localStorage.auth_token` and attached by `TokenInterceptor`
 - Orchestration: Strategy selector (complexity-based routing), task CRUD + SSE logs endpoints
 - Browser: Add Playwright browser installation step to CI workflow for integration tests
 

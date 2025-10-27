@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: Coding Agent Gateway API
+  version: 0.1.0
+  description: |
+    YARP reverse proxy entrypoint for the Coding Agent microservices.
+
+    This specification documents public utility endpoints exposed by the
+    Gateway (health and metrics) and includes a documentation-only example
+    of proxy routing for reference.
+  contact:
+    name: Coding Agent Team
+    url: https://github.com/zerith-jag/coding-agent
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000
+    description: Local development (Gateway)
+
+tags:
+  - name: Health
+    description: Service health and readiness
+  - name: Metrics
+    description: Prometheus metrics scrape endpoint
+  - name: Proxy
+    description: Example reverse proxy route (documentation only)
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health status
+      description: Returns overall health information for the Gateway service.
+      operationId: getGatewayHealth
+      security: []
+      responses:
+        '200':
+          description: The service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: Healthy
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                required: [status]
+              example:
+                status: Healthy
+                checks: []
+
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics
+      description: Exposes Prometheus scrape endpoint for metrics.
+      operationId: getGatewayMetrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus metrics in text exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+                # TYPE process_cpu_seconds_total counter
+                process_cpu_seconds_total 1234.567
+
+  "/proxy/{service}/{path}":
+    parameters:
+      - name: service
+        in: path
+        required: true
+        description: Backend service identifier (e.g., chat, orchestration)
+        schema:
+          type: string
+        example: chat
+      - name: path
+        in: path
+        required: true
+        description: Upstream path segment(s) to be proxied. This is a documentation-only example.
+        style: simple
+        explode: false
+        allowReserved: true
+        schema:
+          type: string
+        example: conversations
+    get:
+      tags: [Proxy]
+      summary: Example proxy GET (documentation only)
+      description: |
+        This is a non-functional documentation stub illustrating a reverse proxy route.
+        Actual proxying is configured in YARP and not directly exposed as an API.
+      operationId: proxyExampleGet
+      x-internal: true
+      responses:
+        '200':
+          description: Documentation-only stub success response
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Proxy example (documentation-only)"
+        '501':
+          description: Not Implemented (documentation-only stub)
+    post:
+      tags: [Proxy]
+      summary: Example proxy POST (documentation only)
+      operationId: proxyExamplePost
+      x-internal: true
+      responses:
+        '200':
+          description: Documentation-only stub success response
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Proxy example (documentation-only)"
+        '501':
+          description: Not Implemented (documentation-only stub)
+    put:
+      tags: [Proxy]
+      summary: Example proxy PUT (documentation only)
+      operationId: proxyExamplePut
+      x-internal: true
+      responses:
+        '200':
+          description: Documentation-only stub success response
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Proxy example (documentation-only)"
+        '501':
+          description: Not Implemented (documentation-only stub)
+    delete:
+      tags: [Proxy]
+      summary: Example proxy DELETE (documentation only)
+      operationId: proxyExampleDelete
+      x-internal: true
+      responses:
+        '200':
+          description: Documentation-only stub success response
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: "Proxy example (documentation-only)"
+        '501':
+          description: Not Implemented (documentation-only stub)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+x-proxy-examples:
+  description: |
+    Reverse proxy is configured in YARP (Gateway) configuration, not via a routed API here.
+    Example YARP route configuration (illustrative):
+  yarp:
+    routes:
+      chat-route:
+        match:
+          path: /chat/{**catchall}
+        transformPathRemovePrefix: /chat
+        clusterId: chat-cluster
+    clusters:
+      chat-cluster:
+        destinations:
+          chat-1:
+            address: http://localhost:5002/

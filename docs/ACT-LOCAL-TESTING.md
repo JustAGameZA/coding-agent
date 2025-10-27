@@ -78,6 +78,104 @@ gh act --workflows ".github/workflows/orchestration.yml"
 gh act --workflows ".github/workflows/ml-classifier.yml"
 ```
 
+## Playwright Setup (Browser Service)
+
+Some Browser integration tests require Playwright-managed browsers (Chromium/Firefox). If browsers are not installed locally, those tests will be skipped with a helpful message; to run them, install browsers as follows.
+
+### Recommended (cross-platform)
+- Install via Node.js (non-interactive):
+  - Windows/macOS/Linux:
+    ```powershell
+    npx playwright install --with-deps
+    ```
+  - On Linux, you may also need system dependencies:
+    ```powershell
+    npx playwright install-deps
+    ```
+
+### .NET-first options
+- Using .NET tool (if you have a tool manifest or prefer global CLI):
+  ```powershell
+  dotnet tool restore
+  dotnet tool run playwright install --with-deps
+  # If no tool manifest exists, you can install globally instead:
+  dotnet tool update -g Microsoft.Playwright.CLI
+  playwright install --with-deps
+  ```
+
+- Using the project-generated script (no tool manifest needed):
+  ```powershell
+  # Build once to generate the Playwright script
+  dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Debug
+
+  # Windows PowerShell
+  pwsh -File src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.ps1 install --with-deps
+
+  # macOS/Linux
+  bash src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.sh install --with-deps
+  ```
+
+### Troubleshooting
+- Error mentioning "headless_shell.exe" or missing executable:
+  - Run one of the install commands above; prefer `--with-deps` on Linux.
+- Corporate proxy or restricted network:
+  - Set environment variables for proxy or use an offline mirror per Playwright docs.
+- Still stuck?
+  - Use the helper script:
+    ```powershell
+    bash src/Services/Browser/install-browsers.sh
+    ```
+  - Or open an issue with the exact error message and OS details.
+
+## Playwright Setup (Browser Service)
+
+Some Browser integration tests require Playwright-managed browsers (Chromium/Firefox). If browsers are not installed locally, those tests will be skipped with a helpful message; to run them, install browsers as follows.
+
+### Recommended (cross-platform)
+- Install via Node.js (non-interactive):
+  - Windows/macOS/Linux:
+    ```powershell
+    npx playwright install --with-deps
+    ```
+  - On Linux, you may also need system dependencies:
+    ```powershell
+    npx playwright install-deps
+    ```
+
+### .NET-first options
+- Using .NET tool (if you have a tool manifest or prefer global CLI):
+  ```powershell
+  dotnet tool restore
+  dotnet tool run playwright install --with-deps
+  # If no tool manifest exists, you can install globally instead:
+  dotnet tool update -g Microsoft.Playwright.CLI
+  playwright install --with-deps
+  ```
+
+- Using the project-generated script (no tool manifest needed):
+  ```powershell
+  # Build once to generate the Playwright script
+  dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Debug
+
+  # Windows PowerShell
+  pwsh -File src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.ps1 install --with-deps
+
+  # macOS/Linux
+  bash src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.sh install --with-deps
+  ```
+
+### Troubleshooting
+- Error mentioning "headless_shell.exe" or missing executable:
+  - Run one of the install commands above; prefer `--with-deps` on Linux.
+- Corporate proxy or restricted network:
+  - Set environment variables for proxy or use an offline mirror per Playwright docs.
+- Still stuck?
+  - Use the helper script:
+    ```powershell
+    bash src/Services/Browser/install-browsers.sh
+    ```
+  - Or open an issue with the exact error message and OS details.
+
 ## Troubleshooting
 
 ### Issue: Node.js not found after .NET setup

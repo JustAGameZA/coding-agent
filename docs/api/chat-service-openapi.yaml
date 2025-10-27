@@ -1,0 +1,322 @@
+openapi: 3.1.0
+info:
+  title: Chat Service API
+  version: 0.1.0
+  description: |
+    REST API for conversations, messages, attachments, and real-time presence.
+    All endpoints require JWT Bearer authentication unless stated otherwise.
+  contact:
+    name: Coding Agent Team
+    url: https://github.com/zerith-jag/coding-agent
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5002
+    description: Local Chat Service
+  - url: http://localhost:5000
+    description: Gateway (routes to Chat)
+
+tags:
+  - name: Conversations
+    description: Conversation management
+  - name: Attachments
+    description: File attachments (multipart upload)
+  - name: Presence
+    description: Online/offline status of participants
+
+security:
+  - bearerAuth: []
+
+paths:
+  /conversations:
+    get:
+      tags: [Conversations]
+      summary: List conversations
+      description: Returns the current user's conversations.
+      operationId: listConversations
+      parameters:
+        - in: query
+          name: page
+          description: 1-based page index
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: pageSize
+          description: Items per page (max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationDto'
+              examples:
+                sample:
+                  value:
+                    - id: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                      userId: "db0f6a8a-1a5a-4bb0-9d6d-8b64b8421a10"
+                      title: "Refactor ChatService repository"
+                      createdAt: "2025-10-27T12:00:00Z"
+                      updatedAt: "2025-10-27T12:15:00Z"
+                      messages: []
+
+    post:
+      tags: [Conversations]
+      summary: Create conversation
+      description: Creates a new conversation for the current user.
+      operationId: createConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+            examples:
+              create:
+                value:
+                  title: "Release planning notes"
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: Resource URL of the created conversation
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDto'
+              examples:
+                created:
+                  value:
+                    id: "5c5f4a0a-47a3-4ee4-8d38-8d4a3a5c7f21"
+                    userId: "db0f6a8a-1a5a-4bb0-9d6d-8b64b8421a10"
+                    title: "Release planning notes"
+                    createdAt: "2025-10-27T12:30:00Z"
+                    updatedAt: "2025-10-27T12:30:00Z"
+                    messages: []
+        '400':
+          description: Validation error
+
+  "/conversations/{id}":
+    get:
+      tags: [Conversations]
+      summary: Get conversation by id
+      operationId: getConversationById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDto'
+        '404':
+          description: Not found
+
+  /attachments:
+    post:
+      tags: [Attachments]
+      summary: Upload attachment
+      description: Uploads a file attachment associated with a conversation.
+      operationId: uploadAttachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                conversationId:
+                  type: string
+                  format: uuid
+                fileName:
+                  type: string
+                  description: Optional override for the filename
+                contentType:
+                  type: string
+                  description: MIME type of the uploaded file
+              required: [file, conversationId]
+            examples:
+              upload:
+                summary: Example multipart parts
+                value:
+                  conversationId: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                  fileName: "design.png"
+                  contentType: "image/png"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentDto'
+              examples:
+                created:
+                  value:
+                    id: "f2b9c3a8-4f2e-49a7-a3e9-2c7a0f6c9a11"
+                    conversationId: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                    fileName: "design.png"
+                    contentType: "image/png"
+                    sizeBytes: 345678
+                    url: "https://files.local/attachments/f2b9c3a8-4f2e-49a7-a3e9-2c7a0f6c9a11"
+
+  "/presence/{conversationId}":
+    get:
+      tags: [Presence]
+      summary: Get presence for conversation participants
+      description: |
+        Returns online/offline status and last seen timestamps for participants
+        in the specified conversation.
+      operationId: getConversationPresence
+      parameters:
+        - in: path
+          name: conversationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Conversation ID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PresenceEntry'
+              examples:
+                sample:
+                  value:
+                    - userId: "db0f6a8a-1a5a-4bb0-9d6d-8b64b8421a10"
+                      isOnline: true
+                      lastSeenUtc: "2025-10-27T12:31:05Z"
+                    - userId: "aa9b6f0e-9a7a-4c1e-9c3a-1e2d3f4b5c6d"
+                      isOnline: false
+                      lastSeenUtc: null
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [title]
+
+    ConversationDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageDto'
+      required: [id, userId, title, createdAt, updatedAt]
+
+    MessageDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          description: Message role
+          enum: [User, Assistant, System]
+        content:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentDto'
+      required: [id, conversationId, role, content, sentAt]
+
+    AttachmentDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        url:
+          type: string
+          format: uri
+      required: [id, conversationId, fileName, contentType, sizeBytes]
+
+    PresenceEntry:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        isOnline:
+          type: boolean
+        lastSeenUtc:
+          description: UTC timestamp when the user was last seen online
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+      required: [userId, isOnline]

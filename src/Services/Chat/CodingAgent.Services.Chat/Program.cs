@@ -4,15 +4,24 @@ using CodingAgent.Services.Chat.Domain.Repositories;
 using CodingAgent.Services.Chat.Domain.Services;
 using CodingAgent.Services.Chat.Infrastructure.Caching;
 using CodingAgent.Services.Chat.Infrastructure.Persistence;
+using CodingAgent.Services.Chat.Infrastructure.Presence;
+using CodingAgent.Services.Chat.Infrastructure.Storage;
 using CodingAgent.SharedKernel.Infrastructure;
 using FluentValidation;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.IIS;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using StackExchange.Redis;
 using System.Diagnostics.Metrics;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +71,97 @@ builder.Services.AddScoped<IMessageCacheService>(sp =>
     var meterFactory = sp.GetRequiredService<IMeterFactory>();
     return new MessageCacheService(redis, logger, meterFactory);
 });
+
+// Register presence service (accepts null connection when Redis is not configured)
+builder.Services.AddScoped<IPresenceService>(sp =>
+{
+    var redis = sp.GetService<IConnectionMultiplexer>();
+    var logger = sp.GetRequiredService<ILogger<PresenceService>>();
+    var meterFactory = sp.GetRequiredService<IMeterFactory>();
+    return new PresenceService(redis, logger, meterFactory);
+});
+
+// File storage service
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+
+// Configure file upload limits
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = 50 * 1024 * 1024; // 50MB
+});
+
+builder.Services.Configure<KestrelServerOptions>(options =>
+{
+    options.Limits.MaxRequestBodySize = 50 * 1024 * 1024; // 50MB
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.ValueLengthLimit = int.MaxValue;
+    options.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50MB
+    options.MultipartHeadersLengthLimit = int.MaxValue;
+});
+
+// JWT Authentication
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CodingAgent";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CodingAgent.API";
+
+if (!string.IsNullOrEmpty(jwtSecret))
+{
+    var key = Encoding.ASCII.GetBytes(jwtSecret);
+    
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = builder.Environment.IsProduction();
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+
+        // Configure SignalR to accept JWT token from query string
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                
+                // If the request is for SignalR hub and token is in query string
+                if (!string.IsNullOrEmpty(accessToken) && 
+                    path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+    builder.Services.AddAuthorization();
+}
+else
+{
+    // No JWT configured - allow anonymous access (development only)
+    if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException("JWT:Secret is required in Production environment");
+    }
+}
 
 // SignalR
 builder.Services.AddSignalR();
@@ -139,13 +239,24 @@ var app = builder.Build();
 // Middleware
 app.UseCors();
 
+// Enable authentication and authorization
+if (!string.IsNullOrEmpty(jwtSecret))
+{
+    app.UseAuthentication();
+    app.UseAuthorization();
+}
+
 // Map endpoints
 app.MapGet("/ping", () => Results.Ok(new { status = "healthy", service = "chat-service", timestamp = DateTime.UtcNow }))
     .WithName("Ping")
     .WithTags("Health")
     .Produces(StatusCodes.Status200OK);
 
+// Map endpoints
 app.MapConversationEndpoints();
+app.MapAttachmentEndpoints();
+app.MapFileEndpoints();
+app.MapPresenceEndpoints();
 app.MapEventTestEndpoints();
 
 // SignalR hub

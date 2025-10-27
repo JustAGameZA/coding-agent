@@ -23,17 +23,8 @@ public class BrowserEndpointsTests : IClassFixture<BrowserWebApplicationFactory>
 
     public async Task InitializeAsync()
     {
-        // Install Playwright browsers if needed
-        try
-        {
-            var playwright = await Microsoft.Playwright.Playwright.CreateAsync();
-            await playwright.Chromium.LaunchAsync();
-            playwright.Dispose();
-        }
-        catch
-        {
-            // Browsers not installed, tests will be skipped
-        }
+        // Skip gracefully if Playwright browsers are not installed
+        await TestGuards.PlaywrightGuard.EnsureBrowsersInstalledOrSkipAsync();
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
