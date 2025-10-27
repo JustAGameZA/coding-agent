@@ -1,18 +1,35 @@
-<mat-toolbar color="primary" class="app-toolbar">
+<mat-toolbar color="primary" class="app-toolbar" *ngIf="isAuthenticated()">
   <button mat-icon-button (click)="toggleSidenav()" class="menu-button">
     <mat-icon>menu</mat-icon>
   </button>
   <span class="toolbar-title">{{ title() }}</span>
   <span class="toolbar-spacer"></span>
   <span class="toolbar-version">{{ version() }}</span>
+  
+  <!-- User Menu -->
+  <button mat-icon-button [matMenuTriggerFor]="userMenu" class="user-menu-button">
+    <mat-icon>account_circle</mat-icon>
+  </button>
+  <mat-menu #userMenu="matMenu">
+    <div class="user-info" mat-menu-item disabled>
+      <mat-icon>person</mat-icon>
+      <span>{{ currentUser()?.username || 'User' }}</span>
+    </div>
+    <mat-divider></mat-divider>
+    <button mat-menu-item (click)="logout()">
+      <mat-icon>logout</mat-icon>
+      <span>Logout</span>
+    </button>
+  </mat-menu>
 </mat-toolbar>
 
 <mat-sidenav-container class="app-sidenav-container">
   <mat-sidenav 
     #sidenav 
     mode="side" 
-    [opened]="sidenavOpened()"
-    class="app-sidenav">
+    [opened]="sidenavOpened() && isAuthenticated()"
+    class="app-sidenav"
+    *ngIf="isAuthenticated()">
     <mat-nav-list>
       <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
         <mat-icon matListItemIcon>dashboard</mat-icon>

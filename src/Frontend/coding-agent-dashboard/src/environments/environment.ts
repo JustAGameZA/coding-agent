@@ -8,5 +8,8 @@ export const environment = {
   chatHubUrl: 'http://localhost:5000/hubs/chat',
   fileBaseUrl: 'http://localhost:5000/files',
   maxUploadSize: 50 * 1024 * 1024, // 50MB
+  // Dashboard Service (BFF) - aggregates data from Chat + Orchestration
+  // Routed through Gateway for proper service discovery
+  dashboardServiceUrl: 'http://localhost:5000/api/dashboard',
   version: '2.0.0'
 };

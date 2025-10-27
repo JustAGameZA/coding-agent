@@ -191,17 +191,25 @@ public class GitHubActionsClient : IGitHubActionsClient
     private static bool IsTransient(Exception ex)
     {
         if (ex is System.Net.Http.HttpRequestException)
+        {
             return true;
+        }
 
         if (ex is System.IO.IOException)
+        {
             return true;
+        }
 
         if (ex is TaskCanceledException)
+        {
             return true;
+        }
 
         // Inspect inner exceptions for socket / connection reset
         if (ex.InnerException != null)
+        {
             return IsTransient(ex.InnerException);
+        }
 
         return false;
     }

@@ -41,8 +41,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Clean NuGet cache on corruption
+        if: failure()
+        run: dotnet nuget locals all --clear
+
       - name: Restore
-        run: dotnet restore CodingAgent.sln
+        run: dotnet restore CodingAgent.sln --force
 
       - name: Build
         run: dotnet build CodingAgent.sln -c Release --no-restore
