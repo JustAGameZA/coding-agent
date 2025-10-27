@@ -18,10 +18,25 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
     public string GenerateAccessToken(User user)
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured");
-        var issuer = jwtSettings["Issuer"] ?? "CodingAgent";
-        var audience = jwtSettings["Audience"] ?? "CodingAgent.API";
+        // Prefer Authentication:Jwt when provided, else fall back to Jwt
+        var authJwt = _configuration.GetSection("Authentication:Jwt");
+        string? secretKey;
+        string? issuer;
+        string? audience;
+
+        if (!string.IsNullOrWhiteSpace(authJwt["SecretKey"]))
+        {
+            secretKey = authJwt["SecretKey"]!;
+            issuer = !string.IsNullOrWhiteSpace(authJwt["Issuer"]) ? authJwt["Issuer"] : "CodingAgent";
+            audience = !string.IsNullOrWhiteSpace(authJwt["Audience"]) ? authJwt["Audience"] : "CodingAgent.API";
+        }
+        else
+        {
+            var jwtSettings = _configuration.GetSection("Jwt");
+            secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured");
+            issuer = !string.IsNullOrWhiteSpace(jwtSettings["Issuer"]) ? jwtSettings["Issuer"] : "CodingAgent";
+            audience = !string.IsNullOrWhiteSpace(jwtSettings["Audience"]) ? jwtSettings["Audience"] : "CodingAgent.API";
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -14,6 +14,8 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using System.Text;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
+using System.IdentityModel.Tokens.Jwt;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +34,9 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
     var connectionString = builder.Configuration.GetConnectionString("AuthDb");
     if (!string.IsNullOrWhiteSpace(connectionString))
     {
-        options.UseNpgsql(connectionString);
+        options.UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "auth"))
+               .UseSnakeCaseNamingConvention();
     }
     else if (builder.Environment.IsProduction())
     {
@@ -58,15 +62,17 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // FluentValidation - Register all validators from the Assembly
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"];
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CodingAgent";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CodingAgent.API";
-
-if (!string.IsNullOrEmpty(jwtSecret))
+// JWT Authentication (support both Jwt:* and Authentication:Jwt:*)
+// Prefer Authentication:Jwt:* when present (matches gateway/docker-compose), otherwise use Jwt:*
+var authJwt = builder.Configuration.GetSection("Authentication:Jwt");
+if (!string.IsNullOrWhiteSpace(authJwt["SecretKey"]))
 {
-    var key = Encoding.ASCII.GetBytes(jwtSecret);
-    
+    var jwtSecret = authJwt["SecretKey"];
+    var jwtIssuer = !string.IsNullOrWhiteSpace(authJwt["Issuer"]) ? authJwt["Issuer"] : "CodingAgent";
+    var jwtAudience = !string.IsNullOrWhiteSpace(authJwt["Audience"]) ? authJwt["Audience"] : "CodingAgent.API";
+
+    Log.Information("[Auth] Configuring JWT (Authentication:Jwt). Issuer={Issuer}, Audience={Audience}, SecretSet={SecretSet}", jwtIssuer, jwtAudience, !string.IsNullOrWhiteSpace(jwtSecret));
+
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -79,7 +85,7 @@ if (!string.IsNullOrEmpty(jwtSecret))
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(key),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret!)),
             ValidateIssuer = true,
             ValidIssuer = jwtIssuer,
             ValidateAudience = true,
@@ -87,14 +93,100 @@ if (!string.IsNullOrEmpty(jwtSecret))
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
+
+        // Temporary diagnostic logging for token validation issues
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning(context.Exception, "JWT authentication failed: {Message}", context.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var sub = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                logger.LogInformation("JWT token validated for sub {Sub}", sub);
+                return Task.CompletedTask;
+            },
+            OnMessageReceived = context =>
+            {
+                // Log presence of Authorization header (without token content)
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                var hasAuth = context.Request.Headers.ContainsKey("Authorization");
+                logger.LogDebug("Authorization header present: {HasAuth}", hasAuth);
+                return Task.CompletedTask;
+            }
+        };
     });
 
     builder.Services.AddAuthorization();
 }
-else if (builder.Environment.IsProduction())
+else
 {
-    throw new InvalidOperationException("JWT:Secret is required in Production environment");
+    string? jwtSecret = builder.Configuration["Jwt:Secret"];
+    string? jwtIssuer = builder.Configuration["Jwt:Issuer"];
+    if (string.IsNullOrWhiteSpace(jwtIssuer))
+    {
+        jwtIssuer = "CodingAgent";
+    }
+    string? jwtAudience = builder.Configuration["Jwt:Audience"];
+    if (string.IsNullOrWhiteSpace(jwtAudience))
+    {
+        jwtAudience = "CodingAgent.API";
+    }
+
+    if (!string.IsNullOrWhiteSpace(jwtSecret))
+    {
+        Log.Information("[Auth] Configuring JWT (Jwt:* fallback). Issuer={Issuer}, Audience={Audience}, SecretSet={SecretSet}", jwtIssuer, jwtAudience, !string.IsNullOrWhiteSpace(jwtSecret));
+        builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddJwtBearer(options =>
+        {
+            options.RequireHttpsMetadata = builder.Environment.IsProduction();
+            options.SaveToken = true;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret!)),
+                ValidateIssuer = true,
+                ValidIssuer = jwtIssuer,
+                ValidateAudience = true,
+                ValidAudience = jwtAudience,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnAuthenticationFailed = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogWarning(context.Exception, "JWT authentication failed (fallback config): {Message}", context.Exception.Message);
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    var sub = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                    logger.LogInformation("JWT token validated (fallback config) for sub {Sub}", sub);
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
+        builder.Services.AddAuthorization();
+    }
+    else if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException("JWT:Secret is required in Production environment");
+    }
 }
+
+// (JWT configuration done above)
 
 // MassTransit Transport
 // Use RabbitMQ only when fully configured; otherwise fall back to in-memory transport (ideal for tests & local dev without a broker)
@@ -178,11 +270,9 @@ app.UseCors();
 app.UseSerilogRequestLogging();
 
 // Enable authentication and authorization
-if (!string.IsNullOrEmpty(jwtSecret))
-{
-    app.UseAuthentication();
-    app.UseAuthorization();
-}
+// Enable authentication/authorization if configured above
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Map endpoints
 app.MapGet("/ping", () => Results.Ok(new 
@@ -195,6 +285,8 @@ app.MapGet("/ping", () => Results.Ok(new
     .WithTags("Health")
     .Produces(StatusCodes.Status200OK)
     .AllowAnonymous();
+
+// (debug endpoint removed after troubleshooting)
 
 // Auth endpoints
 app.MapAuthEndpoints();
