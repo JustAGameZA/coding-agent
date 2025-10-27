@@ -8,6 +8,7 @@ import { interval } from 'rxjs';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { DashboardStats } from '../../core/models/dashboard.models';
 import { NotificationService } from '../../core/services/notifications/notification.service';
+import { formatDuration as formatDurationUtil } from '../../shared/utils/time.utils';
 
 @Component({
   selector: 'app-dashboard',
@@ -266,21 +267,8 @@ export class DashboardComponent {
     return Math.round((s.completedTasks / s.totalTasks) * 100);
   }
 
-  formatDuration(seconds: number): string {
-    if (!seconds || seconds === 0) return '0s';
-    
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
-    }
-  }
+  // Expose shared util for template binding
+  formatDuration = formatDurationUtil;
 
   formatTimestamp(timestamp: string): string {
     if (!timestamp) return 'N/A';

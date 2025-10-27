@@ -19,6 +19,7 @@ using OpenTelemetry.Trace;
 using System.Threading.RateLimiting;
 using Polly;
 using Polly.Extensions.Http;
+using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -153,6 +154,9 @@ builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
 
 // Register Strategy Selector
 builder.Services.AddScoped<IStrategySelector, StrategySelector>();
+
+// Bind GitHub repository configuration (used by TaskService for PR creation)
+builder.Services.Configure<GitHubRepositoryOptions>(builder.Configuration.GetSection("GitHub:Repository"));
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()

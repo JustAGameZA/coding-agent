@@ -9,6 +9,7 @@ export const environment = {
   fileBaseUrl: '/files',
   maxUploadSize: 50 * 1024 * 1024, // 50MB
   // Dashboard Service (BFF)
-  dashboardServiceUrl: 'http://localhost:5007',
+  // Use relative path for production to go through Gateway routing
+  dashboardServiceUrl: '/api/dashboard',
   version: '2.0.0'
 };

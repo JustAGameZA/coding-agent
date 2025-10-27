@@ -9,6 +9,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { EnrichedTask } from '../../core/models/dashboard.models';
 import { NotificationService } from '../../core/services/notifications/notification.service';
+import { formatDuration as formatDurationUtil } from '../../shared/utils/time.utils';
 
 @Component({
   selector: 'app-tasks',
@@ -296,10 +297,12 @@ export class TasksComponent {
     this.error.set(null);
 
     this.dashboardService.getTasks(this.currentPage(), this.pageSize()).subscribe({
-      next: (data) => {
-        this.tasks.set(data);
-        // Note: Backend should return total count in future, for now use data length
-        this.totalCount.set(data.length);
+      next: (data: any) => {
+        // Accept either array or paged response { items, totalCount }
+        const items = Array.isArray(data) ? data : (data?.items ?? []);
+        const total = Array.isArray(data) ? data.length : (data?.totalCount ?? items.length);
+        this.tasks.set(items);
+        this.totalCount.set(total);
         this.loading.set(false);
       },
       error: (err) => {
@@ -331,21 +334,8 @@ export class TasksComponent {
     }
   }
 
-  formatDuration(seconds: number): string {
-    if (!seconds || seconds === 0) return '0s';
-    
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
-    }
-  }
+  // Expose shared util for template binding
+  formatDuration = formatDurationUtil;
 
   formatDate(dateString: string): string {
     if (!dateString) return 'N/A';

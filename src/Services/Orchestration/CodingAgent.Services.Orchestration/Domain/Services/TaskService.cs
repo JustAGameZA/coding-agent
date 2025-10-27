@@ -4,6 +4,7 @@ using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Domain.Events;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SharedKernelTaskType = CodingAgent.SharedKernel.Domain.ValueObjects.TaskType;
 using SharedKernelTaskComplexity = CodingAgent.SharedKernel.Domain.ValueObjects.TaskComplexity;
 using SharedKernelExecutionStrategy = CodingAgent.SharedKernel.Domain.ValueObjects.ExecutionStrategy;
@@ -20,18 +21,21 @@ public class TaskService : ITaskService
     private readonly IEventPublisher _eventPublisher;
     private readonly IGitHubClient _githubClient;
     private readonly ILogger<TaskService> _logger;
+    private readonly GitHubRepositoryOptions _repoOptions;
     private const string EntityName = nameof(CodingTask);
 
     public TaskService(
         ITaskRepository taskRepository,
         IEventPublisher eventPublisher,
         IGitHubClient githubClient,
-        ILogger<TaskService> logger)
+        ILogger<TaskService> logger,
+        IOptions<GitHubRepositoryOptions> repoOptions)
     {
         _taskRepository = taskRepository ?? throw new ArgumentNullException(nameof(taskRepository));
         _eventPublisher = eventPublisher ?? throw new ArgumentNullException(nameof(eventPublisher));
         _githubClient = githubClient ?? throw new ArgumentNullException(nameof(githubClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _repoOptions = repoOptions?.Value ?? new GitHubRepositoryOptions();
     }
 
     public async Task<CodingTask> CreateTaskAsync(
@@ -202,12 +206,18 @@ public class TaskService : ITaskService
                 return;
             }
 
-            // TODO: Extract repo info from task context or configuration
-            // For now, using placeholder values that should be configured
-            var owner = "coding-agent"; // From config or task context
-            var repo = "workspace";     // From config or task context
-            var baseBranch = "main";    // From config or task context
-            var headBranch = $"task/{task.Id}"; // Convention: task/{taskId}
+            // Read repository configuration from options (configured via appsettings)
+            var owner = string.IsNullOrWhiteSpace(_repoOptions.Owner) ? "" : _repoOptions.Owner;
+            var repo = string.IsNullOrWhiteSpace(_repoOptions.Name) ? "" : _repoOptions.Name;
+            var baseBranch = string.IsNullOrWhiteSpace(_repoOptions.BaseBranch) ? "main" : _repoOptions.BaseBranch;
+            var prefix = string.IsNullOrWhiteSpace(_repoOptions.HeadPrefix) ? "task/" : _repoOptions.HeadPrefix!;
+            var headBranch = $"{prefix}{task.Id}"; // Convention: <prefix>{taskId}
+
+            if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
+            {
+                _logger.LogWarning("GitHub repository configuration is missing. Skipping PR creation for task {TaskId}", task.Id);
+                return;
+            }
 
             var prTitle = $"Task #{task.Id}: {task.Title}";
             var prBody = BuildPullRequestDescription(task);
@@ -241,7 +251,8 @@ public class TaskService : ITaskService
                 Url = pr.Url,
                 Head = headBranch,
                 Base = baseBranch,
-                Author = "coding-agent" // TODO: Get from authentication context
+                // TODO: Replace with authenticated user from JWT claims once auth is integrated
+                Author = _repoOptions.DefaultAuthor ?? "system"
             }, cancellationToken);
 
             _logger.LogInformation(

@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using Xunit;
+using System.Net;
+using System.Text;
 
 namespace CodingAgent.Services.Dashboard.Tests.Unit.Infrastructure;
 
@@ -33,6 +35,17 @@ public class OrchestrationServiceClientTests
     [Fact]
     public async Task GetStatsAsync_ShouldReturnMockData()
     {
+        // Arrange: return empty task list for any GET
+        _mockHttpMessageHandler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            });
+
         // Act
         var result = await _client.GetStatsAsync();
 

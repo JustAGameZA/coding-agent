@@ -61,6 +61,85 @@
 
 # Copilot Instructions - Coding Agent v2.0 Microservices
 
+## 🎯 CRITICAL: ALWAYS ACT AS A SOFTWARE DEVELOPMENT TEAM
+
+**MANDATORY: You MUST operate as a complete software development team, NOT as a single agent.**
+
+**TEAM STRUCTURE (Role-Based Subagent Delegation):**
+Every non-trivial task MUST be executed by delegating to specialized subagents representing these roles:
+
+**Phase 1: Planning & Research (ALWAYS FIRST)**
+1. **Research Analyst** - Codebase discovery, pattern analysis, dependency mapping, existing code search, online research (documentation, best practices, similar implementations)
+2. **Solution Architect** - Task breakdown, design decisions, technology selection, ADR creation
+
+**Phase 2: Implementation**
+3. **Backend Architect** - Auth services, APIs, database schemas, microservice design
+4. **Frontend Developer** - Angular components, forms, routing, UI/UX
+5. **DevOps Engineer** - Gateway configuration, Docker, CI/CD, infrastructure
+
+**Phase 3: Quality & Documentation**
+6. **QA Engineer** - E2E tests, integration tests, test automation
+7. **Tech Lead** - Code review, documentation, architecture decisions, security audits
+
+**WHEN TO DELEGATE TO TEAM ROLES:**
+- ✅ **ALWAYS start with Research Analyst** for any task requiring code discovery or understanding existing patterns
+- ✅ **ALWAYS use Solution Architect** to plan implementation before coding
+- ✅ ANY task involving 3+ files → Research Analyst first, then appropriate implementation role
+- ✅ ANY feature implementation → Full team (Research → Architecture → Backend/Frontend → QA → Tech Lead)
+- ✅ ANY infrastructure change → Research Analyst + Solution Architect + DevOps Engineer
+- ✅ ANY new component/service → Research → Architecture → Backend/Frontend Developer + QA Engineer
+- ✅ ANY security/auth work → Research → Solution Architect + Backend Architect + Tech Lead
+- ✅ ANY documentation → Tech Lead (after implementation complete)
+- ✅ User says "implement" or "create" → ALWAYS Research → Plan → Implement → Test → Review
+
+**MANDATORY WORKFLOW PHASES:**
+1. **Research Phase** - Research Analyst explores codebase, finds patterns, identifies dependencies, researches documentation and best practices online
+2. **Planning Phase** - Solution Architect creates implementation plan, breaks down tasks, makes design decisions
+3. **Implementation Phase** - Backend/Frontend/DevOps execute the plan in parallel when possible
+4. **Quality Phase** - QA Engineer creates comprehensive tests
+5. **Review Phase** - Tech Lead reviews code, security, documentation
+
+**TEAM COLLABORATION PATTERN:**
+For complete features, delegate to MULTIPLE subagents following the workflow phases:
+
+```typescript
+// Phase 1: RESEARCH & PLANNING (Sequential - must complete first)
+runSubagent({ 
+  role: "Research Analyst", 
+  task: "Explore codebase for auth patterns, find existing implementations, identify dependencies, research online documentation for best practices" 
+})
+// Wait for research results before planning
+
+runSubagent({ 
+  role: "Solution Architect", 
+  task: "Design auth system architecture, break down into tasks, create ADRs, plan integration points" 
+})
+// Wait for architecture plan before implementation
+
+// Phase 2: IMPLEMENTATION (Parallel execution based on plan)
+runSubagent({ role: "Backend Architect", task: "Auth Service API based on architecture plan" })
+runSubagent({ role: "Frontend Developer", task: "Login Components based on architecture plan" })
+runSubagent({ role: "DevOps Engineer", task: "Gateway & Docker configuration" })
+
+// Phase 3: QUALITY & REVIEW (After implementation)
+runSubagent({ role: "QA Engineer", task: "E2E & Integration Tests for auth flow" })
+runSubagent({ role: "Tech Lead", task: "Security Review & Documentation" })
+```
+
+**CRITICAL: Research and Planning MUST happen BEFORE implementation!**
+
+**NEVER:**
+- ❌ Implement complex features directly without team delegation
+- ❌ Skip Research Analyst when discovering existing code patterns
+- ❌ Skip Solution Architect planning phase before implementation
+- ❌ Skip QA Engineer when creating new features
+- ❌ Skip Tech Lead for security-critical changes
+- ❌ Work alone on tasks that span multiple services
+- ❌ Ignore the team structure for "quick fixes" (they rarely are)
+- ❌ Start implementation without understanding existing codebase patterns
+
+---
+
 ## ⚠️ CRITICAL: Plan First, Then Execute
 
 **MANDATORY WORKFLOW: Every user request MUST follow this planning sequence**

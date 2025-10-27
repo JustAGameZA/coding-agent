@@ -22,71 +22,83 @@ public class OrchestrationServiceClient
     public virtual async Task<OrchestrationStatsDto?> GetStatsAsync(CancellationToken ct = default)
     {
         using var activity = _activitySource.StartActivity("OrchestrationServiceClient.GetStats");
-        
+        var stats = new OrchestrationStatsDto
+        {
+            TotalTasks = 0,
+            TasksPending = 0,
+            TasksRunning = 0,
+            TasksCompleted = 0,
+            TasksFailed = 0
+        };
+
         try
         {
             _logger.LogInformation("Fetching stats from Orchestration Service");
-            
-            // Get tasks with pagination to calculate stats
-            // Note: Orchestration service doesn't have dedicated /stats endpoint yet
-            // Calculate stats from paginated task list (first 1000 tasks)
-            var response = await _httpClient.GetAsync("/tasks?pageSize=100", ct);
-            
-            if (!response.IsSuccessStatusCode)
+
+            // Aggregate over pages until fewer than pageSize results are returned (cap to avoid overload)
+            const int pageSize = 100;
+            const int maxPages = 10; // up to 1000 tasks
+            var page = 1;
+            var total = 0;
+            var pending = 0;
+            var running = 0;
+            var completed = 0;
+            var failed = 0;
+
+            while (page <= maxPages)
             {
-                _logger.LogWarning("Orchestration Service returned {StatusCode}, using empty stats", response.StatusCode);
-                return new OrchestrationStatsDto
+                var response = await _httpClient.GetAsync($"/tasks?page={page}&pageSize={pageSize}", ct);
+                if (!response.IsSuccessStatusCode)
                 {
-                    TotalTasks = 0,
-                    TasksPending = 0,
-                    TasksRunning = 0,
-                    TasksCompleted = 0,
-                    TasksFailed = 0
-                };
-            }
-            
-            var tasks = await response.Content.ReadFromJsonAsync<List<TaskDto>>(ct);
-            
-            if (tasks == null || tasks.Count == 0)
-            {
-                return new OrchestrationStatsDto
+                    _logger.LogWarning("Orchestration Service returned {StatusCode} for page {Page}", response.StatusCode, page);
+                    break;
+                }
+
+                var tasks = await response.Content.ReadFromJsonAsync<List<TaskDto>>(ct) ?? new List<TaskDto>();
+                if (tasks.Count == 0)
                 {
-                    TotalTasks = 0,
-                    TasksPending = 0,
-                    TasksRunning = 0,
-                    TasksCompleted = 0,
-                    TasksFailed = 0
-                };
+                    break;
+                }
+
+                total += tasks.Count;
+                pending += tasks.Count(t => t.Status.Equals("Pending", StringComparison.OrdinalIgnoreCase));
+                running += tasks.Count(t => t.Status.Equals("InProgress", StringComparison.OrdinalIgnoreCase) ||
+                                           t.Status.Equals("Classifying", StringComparison.OrdinalIgnoreCase));
+                completed += tasks.Count(t => t.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase));
+                failed += tasks.Count(t => t.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase));
+
+                if (tasks.Count < pageSize)
+                {
+                    break; // last page
+                }
+
+                page++;
             }
-            
-            // Calculate stats from task list
-            var stats = new OrchestrationStatsDto
+
+            stats = new OrchestrationStatsDto
             {
-                TotalTasks = tasks.Count,
-                TasksPending = tasks.Count(t => t.Status.Equals("Pending", StringComparison.OrdinalIgnoreCase)),
-                TasksRunning = tasks.Count(t => t.Status.Equals("InProgress", StringComparison.OrdinalIgnoreCase) || 
-                                                t.Status.Equals("Classifying", StringComparison.OrdinalIgnoreCase)),
-                TasksCompleted = tasks.Count(t => t.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase)),
-                TasksFailed = tasks.Count(t => t.Status.Equals("Failed", StringComparison.OrdinalIgnoreCase))
+                TotalTasks = total,
+                TasksPending = pending,
+                TasksRunning = running,
+                TasksCompleted = completed,
+                TasksFailed = failed
             };
-            
+
             _logger.LogInformation("Orchestration stats: {TotalTasks} total, {Completed} completed, {Failed} failed, {Running} running",
                 stats.TotalTasks, stats.TasksCompleted, stats.TasksFailed, stats.TasksRunning);
-            
-            return stats;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "HTTP error fetching Orchestration Service stats");
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            return null;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to fetch Orchestration Service stats");
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            return null;
         }
+
+        return stats;
     }
 
     public virtual async Task<List<TaskDto>> GetTasksAsync(int page = 1, int pageSize = 20, CancellationToken ct = default)
