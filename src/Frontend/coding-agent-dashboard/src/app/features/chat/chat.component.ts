@@ -17,34 +17,48 @@ import { PresenceService } from '../../core/services/presence.service';
   standalone: true,
   imports: [CommonModule, MatCardModule, MatIconModule, MatProgressBarModule, ConversationListComponent, ChatThreadComponent, MessageInputComponent],
   template: `
-    <div class="chat-grid">
-      <div class="sidebar">
-        <app-conversation-list (conversationSelected)="onConversationSelected($event)"></app-conversation-list>
+    <div class="chat-grid" [attr.data-testid]="'chat-root'">
+      <div class="sidebar" [attr.data-testid]="'conversation-list-sidebar'">
+        <app-conversation-list 
+          [attr.data-testid]="'conversation-list'"
+          (conversationSelected)="onConversationSelected($event)">
+        </app-conversation-list>
       </div>
       <div class="thread">
         <mat-card class="thread-card">
           <mat-card-header>
             <mat-card-title>
               <div class="title-row">
-                <span>{{ selectedConversation()?.title || 'Select a conversation' }}</span>
+                <span [attr.data-testid]="'chat-title'">{{ selectedConversation()?.title || 'Select a conversation' }}</span>
                 <span class="spacer"></span>
-                <span class="conn" [class.ok]="isConnected()" [class.reconnecting]="connState() === 'Reconnecting'">
+                <span 
+                  class="conn" 
+                  [class.ok]="isConnected()" 
+                  [class.reconnecting]="connState() === 'Reconnecting'"
+                  [attr.data-testid]="'connection-status'">
                   <mat-icon>{{ isConnected() ? 'wifi' : 'wifi_off' }}</mat-icon>
                 </span>
                 <span class="reconnect" *ngIf="connState() === 'Reconnecting' && nextDelay() !== null">
                   Reconnecting in {{ (nextDelay() || 0) / 1000 | number:'1.0-0' }}s
                 </span>
-                <span class="presence" *ngIf="isConnected()">Online: {{ onlineCount() }}</span>
+                <span class="presence" *ngIf="isConnected()" [attr.data-testid]="'online-count'">Online: {{ onlineCount() }}</span>
               </div>
             </mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            <app-chat-thread [data]="messages()"></app-chat-thread>
+            <app-chat-thread 
+              [attr.data-testid]="'chat-thread'"
+              [data]="messages()">
+            </app-chat-thread>
           </mat-card-content>
           <mat-card-actions>
-            <app-message-input (message)="send($event)" (fileSelected)="upload($event)"></app-message-input>
+            <app-message-input 
+              [attr.data-testid]="'message-input'"
+              (message)="send($event)" 
+              (fileSelected)="upload($event)">
+            </app-message-input>
           </mat-card-actions>
-          <div class="upload" *ngIf="uploading()">
+          <div class="upload" *ngIf="uploading()" [attr.data-testid]="'upload-progress'">
             <mat-progress-bar mode="determinate" [value]="uploadProgress()"></mat-progress-bar>
           </div>
         </mat-card>

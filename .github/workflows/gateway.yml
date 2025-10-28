@@ -41,8 +41,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Clean NuGet cache on corruption
+        if: failure()
+        run: dotnet nuget locals all --clear
+
       - name: Restore
-        run: dotnet restore CodingAgent.sln
+        run: dotnet restore CodingAgent.sln --force
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
           DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1

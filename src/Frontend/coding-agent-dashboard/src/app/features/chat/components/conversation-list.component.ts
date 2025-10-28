@@ -12,8 +12,11 @@ import { ConversationDto } from '../../../core/models/chat.models';
   template: `
     <div class="conversation-list">
       <ng-container *ngIf="!loading(); else loadingTpl">
-        <mat-nav-list>
-          <a mat-list-item *ngFor="let c of conversations()" (click)="select(c)">
+        <mat-nav-list [attr.data-testid]="'conversation-nav-list'">
+          <a mat-list-item 
+             [attr.data-testid]="'conversation-item'"
+             *ngFor="let c of conversations()" 
+             (click)="select(c)">
             <span matListItemTitle>{{ c.title }}</span>
             <span matListItemLine>{{ c.updatedAt | date:'short' }}</span>
           </a>

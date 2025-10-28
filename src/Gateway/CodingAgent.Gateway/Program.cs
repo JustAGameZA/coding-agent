@@ -66,8 +66,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
-              .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
-              .WithExposedHeaders("X-Correlation-Id")
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-Correlation-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "Link")
               .AllowCredentials();
     });
 });
@@ -169,6 +169,9 @@ var app = builder.Build();
 
 // Apply CORS policy
 app.UseCors("FrontendCors");
+
+// Enable WebSockets for SignalR proxying
+app.UseWebSockets();
 
 // Serilog request logging
 app.UseSerilogRequestLogging();
@@ -300,7 +303,15 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseAuthorization();
+// IMPORTANT: Apply authorization only for non-auth routes.
+// Auth endpoints (/api/auth/*) must allow anonymous access for login/register/refresh.
+// Using a branch avoids unintended 401 challenges on those paths.
+app.UseWhen(context =>
+    !context.Request.Path.StartsWithSegments("/api/auth", StringComparison.OrdinalIgnoreCase),
+    subApp =>
+    {
+        subApp.UseAuthorization();
+    });
 
 // Expose Prometheus scraping endpoint
 app.MapPrometheusScrapingEndpoint("/metrics");
@@ -324,7 +335,35 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 }).AllowAnonymous();
 
-// Map reverse proxy (requires authentication)
-app.MapReverseProxy().RequireAuthorization();
+// Map reverse proxy with custom authorization
+// Auth endpoints (login, register, refresh) allow anonymous access
+// All other endpoints require authentication
+app.MapReverseProxy(proxyPipeline =>
+{
+    proxyPipeline.Use(async (context, next) =>
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        
+        // Allow anonymous access to auth service endpoints
+        if (path.StartsWith("/api/auth/login", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/auth/register", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/auth/refresh", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/auth/health", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+        
+        // For all other routes, require authentication
+        if (!context.User?.Identity?.IsAuthenticated ?? true)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await context.Response.WriteAsync("Unauthorized");
+            return;
+        }
+        
+        await next();
+    });
+});
 
 await app.RunAsync();

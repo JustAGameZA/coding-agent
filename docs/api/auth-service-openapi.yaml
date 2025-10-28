@@ -1,0 +1,564 @@
+openapi: 3.0.3
+info:
+  title: Authentication Service API
+  description: |
+    Secure authentication and authorization service for Coding Agent v2.0.
+    
+    Features:
+    - JWT-based authentication with refresh token rotation
+    - BCrypt password hashing (work factor 12)
+    - Session management with IP tracking
+    - Role-based access control (RBAC)
+    - Comprehensive input validation
+    
+    **Security**: All protected endpoints require a valid JWT access token in the Authorization header.
+    
+    **Rate Limiting** (enforced at Gateway):
+    - Login: 10 requests/min per IP
+    - Register: 5 requests/hour per IP
+    - Refresh: 60 requests/hour per user
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    url: https://github.com/JustAGameZA/coding-agent
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:5007
+    description: Local development
+  - url: http://localhost:5000/api
+    description: Through Gateway (local)
+  - url: https://api.example.com/api
+    description: Production (through Gateway)
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: User Management
+    description: User profile and account management
+  - name: Health
+    description: Service health and monitoring
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Create a new user account with username, email, and password.
+        Returns JWT tokens upon successful registration (auto-login).
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid:
+                summary: Valid registration
+                value:
+                  username: johndoe
+                  email: john.doe@example.com
+                  password: SecurePass123!
+                  confirmPassword: SecurePass123!
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                success:
+                  summary: Successful registration
+                  value:
+                    accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzZmE4NWY2NC01NzE3LTQ1NjItYjNmYy0yYzk2M2Y2NmFmYTYiLCJ1bmlxdWVfbmFtZSI6ImpvaG5kb2UiLCJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIiwianRpIjoiN2I4YzlkMGUtMWYyYS0zYjRjLTVkNmUtN2Y4YTliMGMxZDJlIiwidWlkIjoiM2ZhODVmNjQtNTcxNy00NTYyLWIzZmMtMmM5NjNmNjZhZmE2Iiwicm9sZSI6IlVzZXIiLCJpc3MiOiJDb2RpbmdBZ2VudCIsImF1ZCI6IkNvZGluZ0FnZW50LkFQSSIsImV4cCI6MTczMDAzNDYwMCwibmJmIjoxNzMwMDMzNzAwfQ.signature
+                    refreshToken: jZXN0IHRva2VuIGZvciByZWZyZXNoaW5nIHB1cnBvc2VzIG9ubHk=
+                    expiresIn: 900
+                    tokenType: Bearer
+        '400':
+          description: Validation error or duplicate user
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+              examples:
+                validation_error:
+                  summary: Validation errors
+                  value:
+                    type: https://tools.ietf.org/html/rfc7231#section-6.5.1
+                    title: One or more validation errors occurred.
+                    status: 400
+                    errors:
+                      Password:
+                        - Password must be at least 8 characters
+                        - Password must contain at least one uppercase letter
+                duplicate_user:
+                  summary: Duplicate username or email
+                  value:
+                    type: https://tools.ietf.org/html/rfc7231#section-6.5.1
+                    title: Registration Failed
+                    detail: Username or email already exists
+                    status: 400
+        '500':
+          description: Internal server error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate user
+      description: |
+        Login with username and password to receive access and refresh tokens.
+        Returns 401 for invalid credentials or deactivated accounts.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valid:
+                summary: Valid login
+                value:
+                  username: johndoe
+                  password: SecurePass123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+        '401':
+          description: Invalid credentials or account deactivated
+        '500':
+          description: Internal server error
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Exchange a valid refresh token for a new access token and refresh token.
+        Implements token rotation: old refresh token is revoked upon successful refresh.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+            examples:
+              valid:
+                summary: Valid refresh request
+                value:
+                  refreshToken: jZXN0IHRva2VuIGZvciByZWZyZXNoaW5nIHB1cnBvc2VzIG9ubHk=
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+        '401':
+          description: Invalid or expired refresh token
+        '500':
+          description: Internal server error
+
+  /auth/me:
+    get:
+      tags:
+        - User Management
+      summary: Get current user information
+      description: |
+        Retrieve profile information for the currently authenticated user.
+        Requires valid JWT access token in Authorization header.
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDto'
+              examples:
+                user:
+                  summary: User profile
+                  value:
+                    id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    username: johndoe
+                    email: john.doe@example.com
+                    roles:
+                      - User
+                    createdAt: '2025-10-27T10:00:00Z'
+        '401':
+          description: Unauthorized - missing or invalid access token
+        '404':
+          description: User not found
+        '500':
+          description: Internal server error
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: |
+        Revoke the refresh token to log out the user.
+        Requires both access token (Authorization header) and refresh token (X-Refresh-Token header).
+      operationId: logout
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Refresh-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: The refresh token to revoke
+          example: jZXN0IHRva2VuIGZvciByZWZyZXNoaW5nIHB1cnBvc2VzIG9ubHk=
+      responses:
+        '204':
+          description: Logout successful - refresh token revoked
+        '400':
+          description: Missing X-Refresh-Token header
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Unauthorized - invalid access token
+        '500':
+          description: Internal server error
+
+  /auth/change-password:
+    post:
+      tags:
+        - User Management
+      summary: Change user password
+      description: |
+        Change the password for the currently authenticated user.
+        All existing sessions are revoked upon successful password change.
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+            examples:
+              valid:
+                summary: Valid password change
+                value:
+                  currentPassword: OldSecurePass123!
+                  newPassword: NewSecurePass456!
+                  confirmNewPassword: NewSecurePass456!
+      responses:
+        '204':
+          description: Password changed successfully
+        '400':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+        '401':
+          description: Invalid current password or access token
+        '500':
+          description: Internal server error
+
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Ping endpoint
+      description: Simple health check endpoint that returns service status
+      operationId: ping
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: auth-service
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: '2025-10-27T15:30:00Z'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: |
+        Comprehensive health check including database connectivity.
+        Used by load balancers and orchestrators (Kubernetes, Docker Swarm).
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [Healthy, Degraded, Unhealthy]
+                    example: Healthy
+                  totalDuration:
+                    type: string
+                    example: '00:00:00.0234567'
+                  entries:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [Healthy, Degraded, Unhealthy]
+                        description:
+                          type: string
+                        duration:
+                          type: string
+        '503':
+          description: Service is unhealthy
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from /auth/login or /auth/register.
+        
+        Example: `Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Username (3-50 characters)
+          example: johndoe
+        password:
+          type: string
+          format: password
+          description: User password
+          example: SecurePass123!
+
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+        - confirmPassword
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Username (alphanumeric, hyphens, underscores only)
+          example: johndoe
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: Valid email address
+          example: john.doe@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: |
+            Password must meet these requirements:
+            - At least 8 characters
+            - At least one uppercase letter
+            - At least one lowercase letter
+            - At least one number
+            - At least one special character
+          example: SecurePass123!
+        confirmPassword:
+          type: string
+          format: password
+          description: Must match password
+          example: SecurePass123!
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          description: Refresh token obtained from login or register
+          example: jZXN0IHRva2VuIGZvciByZWZyZXNoaW5nIHB1cnBvc2VzIG9ubHk=
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+        - confirmNewPassword
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: Current password for verification
+          example: OldSecurePass123!
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: New password (same requirements as registration)
+          example: NewSecurePass456!
+        confirmNewPassword:
+          type: string
+          format: password
+          description: Must match new password
+          example: NewSecurePass456!
+
+    AuthResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - tokenType
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (valid for 15 minutes)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzZmE4NWY2NC01NzE3LTQ1NjItYjNmYy0yYzk2M2Y2NmFmYTYiLCJ1bmlxdWVfbmFtZSI6ImpvaG5kb2UiLCJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIiwianRpIjoiN2I4YzlkMGUtMWYyYS0zYjRjLTVkNmUtN2Y4YTliMGMxZDJlIiwidWlkIjoiM2ZhODVmNjQtNTcxNy00NTYyLWIzZmMtMmM5NjNmNjZhZmE2Iiwicm9sZSI6IlVzZXIiLCJpc3MiOiJDb2RpbmdBZ2VudCIsImF1ZCI6IkNvZGluZ0FnZW50LkFQSSIsImV4cCI6MTczMDAzNDYwMCwibmJmIjoxNzMwMDMzNzAwfQ.signature
+        refreshToken:
+          type: string
+          description: Refresh token (valid for 7 days)
+          example: jZXN0IHRva2VuIGZvciByZWZyZXNoaW5nIHB1cnBvc2VzIG9ubHk=
+        expiresIn:
+          type: integer
+          description: Access token lifetime in seconds (900 = 15 minutes)
+          example: 900
+        tokenType:
+          type: string
+          description: Token type (always "Bearer")
+          example: Bearer
+          default: Bearer
+
+    UserDto:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - roles
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        username:
+          type: string
+          description: Username
+          example: johndoe
+        email:
+          type: string
+          format: email
+          description: Email address
+          example: john.doe@example.com
+        roles:
+          type: array
+          items:
+            type: string
+          description: User roles
+          example: [User]
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: '2025-10-27T10:00:00Z'
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type
+          example: https://tools.ietf.org/html/rfc7231#section-6.5.1
+        title:
+          type: string
+          description: Short, human-readable summary
+          example: Bad Request
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+        detail:
+          type: string
+          description: Human-readable explanation
+          example: The request could not be processed
+        instance:
+          type: string
+          description: URI reference identifying the specific occurrence
+
+    ValidationProblemDetails:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            errors:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+              description: Validation errors by field
+              example:
+                Username:
+                  - Username must be between 3 and 50 characters
+                Password:
+                  - Password must be at least 8 characters
+                  - Password must contain at least one uppercase letter

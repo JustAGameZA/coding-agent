@@ -8,5 +8,8 @@ export const environment = {
   chatHubUrl: '/hubs/chat',
   fileBaseUrl: '/files',
   maxUploadSize: 50 * 1024 * 1024, // 50MB
+  // Dashboard Service (BFF)
+  // Use relative path for production to go through Gateway routing
+  dashboardServiceUrl: '/api/dashboard',
   version: '2.0.0'
 };

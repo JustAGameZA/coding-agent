@@ -1,6 +1,7 @@
 using CodingAgent.Services.CICDMonitor.Domain.Entities;
 using CodingAgent.Services.CICDMonitor.Domain.ValueObjects;
 using Octokit;
+using System.Net;
 
 namespace CodingAgent.Services.CICDMonitor.Infrastructure.GitHub;
 
@@ -82,6 +83,20 @@ public class GitHubActionsClient : IGitHubActionsClient
         }
         catch (ApiException ex)
         {
+            // Handle common auth/visibility errors gracefully in dev (or public repos without tokens)
+            if (ex.StatusCode == HttpStatusCode.Unauthorized ||
+                ex.StatusCode == HttpStatusCode.Forbidden ||
+                ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "GitHub API returned {StatusCode} for {Owner}/{Repository} when fetching workflow runs. Returning empty set.",
+                    (int)ex.StatusCode,
+                    owner,
+                    repository);
+                return Enumerable.Empty<Build>();
+            }
+
             _logger.LogError(
                 ex,
                 "Failed to fetch workflow runs for {Owner}/{Repository}",
@@ -175,6 +190,18 @@ public class GitHubActionsClient : IGitHubActionsClient
         }
         catch (ApiException ex)
         {
+            if (ex.StatusCode == HttpStatusCode.Unauthorized ||
+                ex.StatusCode == HttpStatusCode.Forbidden ||
+                ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "GitHub API returned {StatusCode} for run {WorkflowRunId}. Returning empty log set.",
+                    (int)ex.StatusCode,
+                    workflowRunId);
+                return Array.Empty<string>();
+            }
+
             _logger.LogError(
                 ex,
                 "Failed to fetch logs for workflow run {WorkflowRunId}",
@@ -191,17 +218,25 @@ public class GitHubActionsClient : IGitHubActionsClient
     private static bool IsTransient(Exception ex)
     {
         if (ex is System.Net.Http.HttpRequestException)
+        {
             return true;
+        }
 
         if (ex is System.IO.IOException)
+        {
             return true;
+        }
 
         if (ex is TaskCanceledException)
+        {
             return true;
+        }
 
         // Inspect inner exceptions for socket / connection reset
         if (ex.InnerException != null)
+        {
             return IsTransient(ex.InnerException);
+        }
 
         return false;
     }
