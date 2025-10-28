@@ -2,11 +2,11 @@
 
 #nullable disable
 
-namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
+namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations;
+
+/// <inheritdoc />
+public partial class AlignAuthSchema : Migration
 {
-    /// <inheritdoc />
-    public partial class AlignAuthSchema : Migration
-    {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -549,4 +549,3 @@ namespace CodingAgent.Services.Auth.Infrastructure.Persistence.Migrations
                 onDelete: ReferentialAction.Cascade);
         }
     }
-}

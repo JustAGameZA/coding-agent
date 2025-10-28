@@ -79,7 +79,15 @@ public class AuthService : IAuthService
         return new AuthResponse(
             AccessToken: accessToken,
             RefreshToken: refreshToken,
-            ExpiresIn: 900 // 15 minutes in seconds
+            ExpiresIn: 900, // 15 minutes in seconds
+            TokenType: "Bearer",
+            User: new UserDto(
+                user.Id,
+                user.Username,
+                user.Email,
+                user.Roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                user.CreatedAt
+            )
         );
     }
 
@@ -125,7 +133,15 @@ public class AuthService : IAuthService
         return new AuthResponse(
             AccessToken: accessToken,
             RefreshToken: refreshToken,
-            ExpiresIn: 900
+            ExpiresIn: 900,
+            TokenType: "Bearer",
+            User: new UserDto(
+                user.Id,
+                user.Username,
+                user.Email,
+                user.Roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                user.CreatedAt
+            )
         );
     }
 
@@ -180,7 +196,15 @@ public class AuthService : IAuthService
         return new AuthResponse(
             AccessToken: accessToken,
             RefreshToken: newRefreshToken,
-            ExpiresIn: 900
+            ExpiresIn: 900,
+            TokenType: "Bearer",
+            User: new UserDto(
+                user.Id,
+                user.Username,
+                user.Email,
+                user.Roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                user.CreatedAt
+            )
         );
     }
 

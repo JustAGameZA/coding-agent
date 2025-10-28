@@ -42,12 +42,19 @@ export class AuthService {
    */
   private initializeAuth(): void {
     const token = this.getStoredToken();
-    if (token) {
+    if (token && !this.isTokenExpired(token)) {
       this.tokenSubject.next(token);
       
-      // Try to decode user from token
-      const user = this.decodeToken(token);
-      if (user) {
+      // Decode token to extract user info
+      const decoded = this.decodeToken(token);
+      if (decoded) {
+        // Construct User object from JWT claims
+        const user: User = {
+          id: decoded.sub || decoded.uid,
+          username: decoded.unique_name || decoded.username,
+          email: decoded.email,
+          roles: Array.isArray(decoded.role) ? decoded.role : [decoded.role || 'User']
+        };
         this.userSignal.set(user);
         this.setupAutoRefresh(token);
       }
@@ -62,7 +69,7 @@ export class AuthService {
     
     return this.http.post<LoginResponse>(`${this.authApiUrl}/login`, request).pipe(
       tap(response => {
-        this.setToken(response.token);
+        this.setToken(response.accessToken);
         this.userSignal.set(response.user);
         
         // Store refresh token if provided
@@ -71,7 +78,7 @@ export class AuthService {
         }
         
         // Setup auto-refresh
-        this.setupAutoRefresh(response.token, response.expiresIn);
+        this.setupAutoRefresh(response.accessToken, response.expiresIn);
       }),
       catchError(this.handleAuthError.bind(this))
     );
@@ -84,14 +91,14 @@ export class AuthService {
     return this.http.post<LoginResponse>(`${this.authApiUrl}/register`, registerRequest).pipe(
       tap(response => {
         // Auto-login after successful registration
-        this.setToken(response.token);
+        this.setToken(response.accessToken);
         this.userSignal.set(response.user);
         
         if (response.refreshToken) {
           this.setRefreshToken(response.refreshToken);
         }
         
-        this.setupAutoRefresh(response.token, response.expiresIn);
+        this.setupAutoRefresh(response.accessToken, response.expiresIn);
       }),
       catchError(this.handleAuthError.bind(this))
     );
@@ -165,11 +172,11 @@ export class AuthService {
     
     return this.http.post<RefreshTokenResponse>(`${this.authApiUrl}/refresh`, request).pipe(
       tap(response => {
-        this.setToken(response.token);
+        this.setToken(response.accessToken);
         this.setRefreshToken(response.refreshToken);
-        this.setupAutoRefresh(response.token, response.expiresIn);
+        this.setupAutoRefresh(response.accessToken, response.expiresIn);
       }),
-      map(response => response.token),
+      map(response => response.accessToken),
       catchError(error => {
         // If refresh fails, logout user
         this.clearAuth();
@@ -311,9 +318,12 @@ export class AuthService {
     } else if (error.status === 409) {
       errorMessage = 'Username or email already exists';
     } else if (error.status === 400) {
-      errorMessage = error.error?.message || 'Invalid request data';
+      // Backend returns ProblemDetails with 'detail' field for duplicate username/email
+      errorMessage = error.error?.detail || error.error?.message || 'Invalid request data';
     } else if (error.status === 0) {
       errorMessage = 'Unable to connect to server';
+    } else if (error.error?.detail) {
+      errorMessage = error.error.detail;
     } else if (error.error?.message) {
       errorMessage = error.error.message;
     }

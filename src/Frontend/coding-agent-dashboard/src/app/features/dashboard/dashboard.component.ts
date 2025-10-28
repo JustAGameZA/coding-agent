@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatButtonModule } from '@angular/material/button';
+import { RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { interval } from 'rxjs';
 import { DashboardService } from '../../core/services/dashboard.service';
@@ -13,13 +15,20 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, RouterModule, MatButtonModule],
   template: `
     <div class="dashboard-container" [attr.data-testid]="'dashboard-root'">
       <h1 [attr.data-testid]="'dashboard-title'">
         <mat-icon>dashboard</mat-icon>
         Coding Agent Dashboard
       </h1>
+
+      <div class="dashboard-actions">
+        <button mat-stroked-button color="primary" routerLink="/chat" [attr.data-testid]="'go-to-chat'">
+          <mat-icon>chat</mat-icon>
+          <span>Go to Chat</span>
+        </button>
+      </div>
       
       <div class="loading-overlay" *ngIf="loading()">
         <mat-progress-spinner mode="indeterminate" diameter="60"></mat-progress-spinner>
@@ -154,6 +163,13 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       margin-bottom: 24px;
     }
 
+    .dashboard-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+
     .stat-card {
       transition: transform 0.2s, box-shadow 0.2s;
     }
@@ -250,13 +266,34 @@ export class DashboardComponent {
         this.loading.set(false);
       },
       error: (err) => {
-        const errorMsg = 'Failed to load dashboard statistics';
-        this.error.set(errorMsg);
-        this.loading.set(false);
-        if (!silent) {
-          this.notificationService.error(errorMsg);
+        // Dashboard service not yet implemented - show default stats
+        const errorMsg = err.status === 404 
+          ? 'Dashboard service not available yet' 
+          : 'Failed to load dashboard statistics';
+        
+        // For 404, set default empty stats instead of error
+        if (err.status === 404) {
+          this.stats.set({
+            totalTasks: 0,
+            completedTasks: 0,
+            runningTasks: 0,
+            failedTasks: 0,
+            totalConversations: 0,
+            totalMessages: 0,
+            averageTaskDuration: 0,
+            lastUpdated: new Date().toISOString()
+          });
+          this.loading.set(false);
+          // Don't show error notification for 404 - service not implemented yet
+          console.info('Dashboard Service not available (404) - showing default stats');
+        } else {
+          this.error.set(errorMsg);
+          this.loading.set(false);
+          if (!silent) {
+            this.notificationService.error(errorMsg);
+          }
+          console.error('Dashboard stats error:', err);
         }
-        console.error('Dashboard stats error:', err);
       }
     });
   }

@@ -170,6 +170,9 @@ var app = builder.Build();
 // Apply CORS policy
 app.UseCors("FrontendCors");
 
+// Enable WebSockets for SignalR proxying
+app.UseWebSockets();
+
 // Serilog request logging
 app.UseSerilogRequestLogging();
 

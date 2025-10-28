@@ -56,7 +56,6 @@ test.describe('Login Flow', () => {
   test('should validate empty username field', async () => {
     // Try to submit with empty username
     await loginPage.passwordInput.fill('somepassword');
-    await loginPage.loginButton.click();
     
     // Button should be disabled
     const isDisabled = await loginPage.isLoginButtonDisabled();
@@ -65,7 +64,6 @@ test.describe('Login Flow', () => {
   
   test('should validate empty password field', async () => {
     await loginPage.usernameInput.fill('someuser');
-    await loginPage.loginButton.click();
     
     // Button should be disabled
     const isDisabled = await loginPage.isLoginButtonDisabled();
@@ -92,12 +90,12 @@ test.describe('Login Flow', () => {
     let isVisible = await loginPage.isPasswordVisible();
     expect(isVisible).toBe(false);
     
-    // Click toggle
+    // Click toggle to show
     await loginPage.togglePassword();
     isVisible = await loginPage.isPasswordVisible();
     expect(isVisible).toBe(true);
     
-    // Toggle back
+    // Toggle back to hidden
     await loginPage.togglePassword();
     isVisible = await loginPage.isPasswordVisible();
     expect(isVisible).toBe(false);
@@ -108,8 +106,9 @@ test.describe('Login Flow', () => {
     
     await loginPage.fillForm(username, password, true);
     
-    // Verify checkbox is checked
-    const isChecked = await loginPage.rememberMeCheckbox.isChecked();
+    // Verify checkbox is checked (Material checkbox - check the input inside)
+    const inputCheckbox = loginPage.rememberMeCheckbox.locator('input');
+    const isChecked = await inputCheckbox.isChecked();
     expect(isChecked).toBe(true);
     
     await loginPage.loginButton.click();
@@ -119,7 +118,8 @@ test.describe('Login Flow', () => {
   test('should navigate to register page', async ({ page }) => {
     await loginPage.clickRegisterLink();
     
-    // Should be on register page
+    // Wait for navigation and verify URL
+    await page.waitForURL(/.*register/, { timeout: 10000 });
     await expect(page).toHaveURL(/.*register/);
   });
   

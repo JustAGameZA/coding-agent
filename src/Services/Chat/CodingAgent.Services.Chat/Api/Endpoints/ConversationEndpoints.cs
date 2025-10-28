@@ -16,7 +16,8 @@ public static class ConversationEndpoints
     {
         var group = app.MapGroup("/conversations")
             .WithTags("Conversations")
-            .WithOpenApi();
+            .WithOpenApi()
+            .RequireAuthorization(); // Require JWT authentication for all conversation endpoints
 
         group.MapGet("", GetConversations)
             .WithName("GetConversations")
@@ -38,7 +39,7 @@ public static class ConversationEndpoints
             .Produces<ConversationDto>(StatusCodes.Status201Created)
             .ProducesValidationProblem();
 
-        group.MapPut("{id:guid}", UpdateConversation)
+        group.MapPut("{id}", UpdateConversation)
             .WithName("UpdateConversation")
             .WithDescription("Update the title of an existing conversation. Title must be between 1 and 200 characters.")
             .WithSummary("Update conversation title")
@@ -82,9 +83,11 @@ public static class ConversationEndpoints
         var items = pagedResult.Items.Select(c => new ConversationDto
         {
             Id = c.Id,
+            UserId = c.UserId,
             Title = c.Title,
             CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt
+            UpdatedAt = c.UpdatedAt,
+            Messages = new List<MessageDto>()
         }).ToList();
 
         // Add pagination metadata to response headers
@@ -126,7 +129,12 @@ public static class ConversationEndpoints
         return Results.Ok(items);
     }
 
-    private static async Task<IResult> GetConversation(Guid id, IConversationRepository repository, ILogger<Program> logger, CancellationToken ct)
+    private static async Task<IResult> GetConversation(
+        Guid id,
+        IConversationRepository repository,
+        ILogger<Program> logger,
+        HttpContext context,
+        CancellationToken ct)
     {
         logger.LogInformation("Getting conversation {ConversationId}", id);
         var entity = await repository.GetByIdAsync(id, ct);
@@ -135,12 +143,39 @@ public static class ConversationEndpoints
             return Results.NotFound();
         }
 
+        // Extract userId from JWT claims - try multiple claim names
+        var userIdClaim = context.User.FindFirst("sub") 
+                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+
+        if (userIdClaim == null)
+        {
+            // No userId claim found; treat as forbidden for safety
+            logger.LogWarning("GetConversation: missing user id claim");
+            return Results.Forbid();
+        }
+
+        if (!Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            logger.LogWarning("GetConversation: invalid user id claim value {UserId}", userIdClaim.Value);
+            return Results.Forbid();
+        }
+
+        // Enforce ownership
+        if (entity.UserId != userId)
+        {
+            logger.LogWarning("User {UserId} attempted to access conversation {ConversationId} they do not own", userId, id);
+            return Results.Forbid();
+        }
+
         var dto = new ConversationDto
         {
             Id = entity.Id,
+            UserId = entity.UserId,
             Title = entity.Title,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            Messages = new List<MessageDto>()
         };
         return Results.Ok(dto);
     }
@@ -150,6 +185,7 @@ public static class ConversationEndpoints
         IValidator<CreateConversationRequest> validator,
         IConversationRepository repository,
         ILogger<Program> logger,
+        HttpContext context,
         CancellationToken ct)
     {
         var validationResult = await validator.ValidateAsync(request, ct);
@@ -160,41 +196,79 @@ public static class ConversationEndpoints
 
         logger.LogInformation("Creating conversation: {Title}", request.Title);
 
-        var userId = Guid.NewGuid(); // TODO: replace with authenticated user when auth is wired
+        // Extract userId from JWT claims - try multiple claim names
+        var userIdClaim = context.User.FindFirst("sub") 
+                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        
+        if (userIdClaim == null)
+        {
+            // Log all claims for debugging
+            var claims = string.Join(", ", context.User.Claims.Select(c => $"{c.Type}={c.Value}"));
+            logger.LogWarning("Could not extract userId from JWT. Available claims: {Claims}", claims);
+            return Results.Problem("User ID could not be determined", statusCode: 400);
+        }
+        
+        if (!Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            logger.LogWarning("Could not parse userId as GUID: {UserId}", userIdClaim.Value);
+            return Results.Problem("Invalid user ID format", statusCode: 400);
+        }
+
         var entity = new Conversation(userId, request.Title);
         await repository.CreateAsync(entity, ct);
 
         var dto = new ConversationDto
         {
             Id = entity.Id,
+            UserId = entity.UserId,
             Title = entity.Title,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            Messages = new List<MessageDto>()
         };
 
         return Results.Created($"/conversations/{dto.Id}", dto);
     }
 
     private static async Task<IResult> UpdateConversation(
-        Guid id,
+        string id,
         UpdateConversationRequest request,
         IValidator<UpdateConversationRequest> validator,
         IConversationRepository repository,
         ILogger<Program> logger,
+        HttpContext context,
         CancellationToken ct)
     {
+        // Validate id format
+        if (!Guid.TryParse(id, out var conversationId))
+        {
+            logger.LogWarning("UpdateConversation: invalid GUID format {Id}", id);
+            return Results.Problem("Invalid conversation ID format", statusCode: 400);
+        }
+
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
             return Results.ValidationProblem(validationResult.ToDictionary());
         }
 
-        logger.LogInformation("Updating conversation {ConversationId}: {Title}", id, request.Title);
+        logger.LogInformation("Updating conversation {ConversationId}: {Title}", conversationId, request.Title);
         
-        var entity = await repository.GetByIdAsync(id, ct);
+        var entity = await repository.GetByIdAsync(conversationId, ct);
         if (entity is null)
         {
             return Results.NotFound();
+        }
+
+        // Ownership check
+        var userIdClaim = context.User.FindFirst("sub") 
+                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId) || entity.UserId != userId)
+        {
+            logger.LogWarning("User not authorized to update conversation {ConversationId}", conversationId);
+            return Results.Forbid();
         }
 
         entity.UpdateTitle(request.Title);
@@ -203,6 +277,7 @@ public static class ConversationEndpoints
         var dto = new ConversationDto
         {
             Id = entity.Id,
+            UserId = entity.UserId,
             Title = entity.Title,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt
@@ -211,13 +286,28 @@ public static class ConversationEndpoints
         return Results.Ok(dto);
     }
 
-    private static async Task<IResult> DeleteConversation(Guid id, IConversationRepository repository, ILogger<Program> logger, CancellationToken ct)
+    private static async Task<IResult> DeleteConversation(
+        Guid id,
+        IConversationRepository repository,
+        ILogger<Program> logger,
+        HttpContext context,
+        CancellationToken ct)
     {
         logger.LogInformation("Deleting conversation {ConversationId}", id);
         var entity = await repository.GetByIdAsync(id, ct);
         if (entity is null)
         {
             return Results.NotFound();
+        }
+
+        // Ownership check
+        var userIdClaim = context.User.FindFirst("sub") 
+                         ?? context.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId) || entity.UserId != userId)
+        {
+            logger.LogWarning("User not authorized to delete conversation {ConversationId}", id);
+            return Results.Forbid();
         }
         await repository.DeleteAsync(id, ct);
         return Results.NoContent();
@@ -232,9 +322,11 @@ public static class ConversationEndpoints
 public record ConversationDto
 {
     public Guid Id { get; init; }
+    public Guid UserId { get; init; }
     public string Title { get; init; } = string.Empty;
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
+    public List<MessageDto> Messages { get; init; } = new();
 }
 
 /// <summary>
@@ -255,4 +347,17 @@ public record UpdateConversationRequest(string Title);
 /// <param name="ConversationId">The conversation identifier</param>
 /// <param name="Content">Message content (1-10,000 characters)</param>
 public record CreateMessageRequest(Guid ConversationId, string Content);
+
+/// <summary>
+/// Message data transfer object (minimal shape to satisfy API contract)
+/// </summary>
+public record MessageDto
+{
+    public Guid Id { get; init; }
+    public Guid ConversationId { get; init; }
+    public string Role { get; init; } = string.Empty;
+    public string Content { get; init; } = string.Empty;
+    public DateTime SentAt { get; init; }
+    public List<AttachmentDto> Attachments { get; init; } = new();
+}
 

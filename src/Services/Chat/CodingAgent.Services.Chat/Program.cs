@@ -32,6 +32,7 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
     if (!string.IsNullOrWhiteSpace(connectionString))
     {
         // Use PostgreSQL when a connection string is explicitly provided
+        // Column names configured manually in ChatDbContext using HasColumnName
         options.UseNpgsql(connectionString);
     }
     else if (builder.Environment.IsProduction())

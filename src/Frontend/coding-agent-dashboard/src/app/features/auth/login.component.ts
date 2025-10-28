@@ -1,7 +1,7 @@
 import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -18,6 +18,7 @@ import { NotificationService } from '../../core/services/notifications/notificat
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    RouterModule,
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
@@ -47,6 +48,7 @@ import { NotificationService } from '../../core/services/notifications/notificat
                 matInput 
                 type="text"
                 formControlName="username"
+                name="username"
                 placeholder="Enter your username or email"
                 [attr.data-testid]="'username-input'"
                 autocomplete="username"
@@ -67,6 +69,7 @@ import { NotificationService } from '../../core/services/notifications/notificat
                 matInput 
                 [type]="hidePassword() ? 'password' : 'text'"
                 formControlName="password"
+                name="password"
                 placeholder="Enter your password"
                 [attr.data-testid]="'password-input'"
                 autocomplete="current-password"

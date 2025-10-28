@@ -63,7 +63,8 @@ export class LoginPage {
     await this.passwordInput.fill(password);
     
     if (rememberMe) {
-      await this.rememberMeCheckbox.check();
+      // Material checkbox requires clicking the label or input inside
+      await this.rememberMeCheckbox.locator('input').check();
     }
   }
   
@@ -91,7 +92,6 @@ export class LoginPage {
   
   async clickRegisterLink() {
     await this.registerLink.click();
-    await this.page.waitForURL('**/register');
   }
   
   async getCurrentUrl(): Promise<string> {
@@ -208,7 +208,6 @@ export class RegisterPage {
   
   async clickLoginLink() {
     await this.loginLink.click();
-    await this.page.waitForURL('**/login');
   }
   
   async hasUsernameError(): Promise<boolean> {

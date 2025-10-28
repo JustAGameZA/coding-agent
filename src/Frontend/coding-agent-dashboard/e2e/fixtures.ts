@@ -195,9 +195,10 @@ export const mockRefreshToken = 'refresh_token_mock_value_12345';
 
 // Mock Auth Response
 export const mockLoginResponse = {
-  token: mockJwtToken,
+  accessToken: mockJwtToken,
   refreshToken: mockRefreshToken,
   expiresIn: 3600,
+  tokenType: 'Bearer',
   user: {
     id: '12345678-abcd-4efg-hijk-lmnopqrstuv',
     username: 'testuser',
@@ -276,9 +277,10 @@ export async function mockAuthAPI(page: Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          token: mockJwtToken,
+          accessToken: mockJwtToken,
           refreshToken: mockRefreshToken,
           expiresIn: 3600,
+          tokenType: 'Bearer',
           user: {
             id: postData.username + '-id-mock',
             username: postData.username,
@@ -302,9 +304,10 @@ export async function mockAuthAPI(page: Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          token: mockJwtToken,
+          accessToken: mockJwtToken,
           refreshToken: mockRefreshToken,
-          expiresIn: 3600
+          expiresIn: 3600,
+          tokenType: 'Bearer'
         })
       });
     } else {
@@ -359,4 +362,221 @@ export async function setupAuthenticatedUser(page: Page) {
   await mockDashboardAPI(page);
   await mockTasksAPI(page);
   await mockChatAPI(page);
+}
+
+// Mock SignalR negotiate response
+export const mockSignalRNegotiateResponse = {
+  connectionId: 'mock-connection-id-12345',
+  connectionToken: 'mock-connection-token-67890',
+  negotiateVersion: 1,
+  availableTransports: [
+    {
+      transport: 'WebSockets',
+      transferFormats: ['Text', 'Binary']
+    }
+  ]
+};
+
+// Mock SignalR messages
+export const mockSignalRMessages = {
+  receiveMessage: (conversationId: string, content: string, role: 'User' | 'Assistant' = 'Assistant') => ({
+    id: `msg-${Date.now()}`,
+    conversationId,
+    content,
+    role,
+    sentAt: new Date().toISOString(),
+    attachments: []
+  }),
+  userTyping: (conversationId: string, userId: string, isTyping: boolean) => ({
+    conversationId,
+    userId,
+    username: 'Alice',
+    isTyping
+  }),
+  userOnline: (userId: string, username: string = 'Alice') => ({
+    userId,
+    username,
+    status: 'Online'
+  }),
+  userOffline: (userId: string) => ({
+    userId,
+    status: 'Offline'
+  })
+};
+
+/**
+ * Mock SignalR WebSocket connection
+ * Intercepts negotiate endpoint and WebSocket upgrade
+ */
+export async function mockSignalRConnection(page: Page, options?: {
+  simulateFailure?: boolean;
+  delayMs?: number;
+}) {
+  const { simulateFailure = false, delayMs = 0 } = options || {};
+  
+  // Mock SignalR negotiate endpoint
+  await page.route('**/hubs/chat/negotiate**', async route => {
+    console.log('MOCKING SignalR negotiate');
+    
+    if (simulateFailure) {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Connection failed' })
+      });
+      return;
+    }
+    
+    if (delayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockSignalRNegotiateResponse)
+    });
+  });
+  
+  // Inject mock SignalR WebSocket into the page
+  await page.addInitScript(() => {
+    // Store original WebSocket
+    const OriginalWebSocket = window.WebSocket;
+    
+    // Create mock WebSocket class
+    class MockWebSocket {
+      url: string;
+      readyState: number = 0; // CONNECTING
+      onopen: ((event: Event) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      
+      private messageHandlers: Set<Function> = new Set();
+      
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSING = 2;
+      static CLOSED = 3;
+      
+      constructor(url: string) {
+        this.url = url;
+        console.log('[MockWebSocket] Created for:', url);
+        
+        // Store instance globally for test access
+        (window as any).__mockWebSocket = this;
+        
+        // Simulate successful connection after 100ms
+        setTimeout(() => {
+          this.readyState = 1; // OPEN
+          if (this.onopen) {
+            this.onopen(new Event('open'));
+          }
+          console.log('[MockWebSocket] Connected');
+        }, 100);
+      }
+      
+      send(data: string) {
+        console.log('[MockWebSocket] Send:', data);
+        try {
+          const parsed = JSON.parse(data);
+          // Store sent messages for test verification
+          if (!(window as any).__signalRSentMessages) {
+            (window as any).__signalRSentMessages = [];
+          }
+          (window as any).__signalRSentMessages.push(parsed);
+        } catch (e) {
+          console.log('[MockWebSocket] Non-JSON message:', data);
+        }
+      }
+      
+      close() {
+        console.log('[MockWebSocket] Close requested');
+        this.readyState = 3; // CLOSED
+        if (this.onclose) {
+          this.onclose(new CloseEvent('close'));
+        }
+      }
+      
+      // Helper method for tests to simulate incoming messages
+      simulateMessage(data: any) {
+        if (this.onmessage) {
+          const messageData = typeof data === 'string' ? data : JSON.stringify(data);
+          this.onmessage(new MessageEvent('message', { data: messageData }));
+        }
+      }
+    }
+    
+    // Replace WebSocket with mock
+    (window as any).WebSocket = MockWebSocket;
+    console.log('[Test] WebSocket mocked successfully');
+  });
+}
+
+/**
+ * Simulate incoming SignalR message
+ */
+export async function simulateSignalRMessage(page: Page, method: string, ...args: any[]) {
+  await page.evaluate(({ method, args }) => {
+    const ws = (window as any).__mockWebSocket;
+    if (!ws) {
+      throw new Error('MockWebSocket not initialized');
+    }
+    
+    // SignalR message format: {"type":1,"target":"MethodName","arguments":[...]}
+    const signalRMessage = {
+      type: 1, // Invocation message
+      target: method,
+      arguments: args
+    };
+    
+    ws.simulateMessage(JSON.stringify(signalRMessage) + '\x1e');
+    console.log('[Test] Simulated SignalR message:', method, args);
+  }, { method, args });
+}
+
+/**
+ * Get messages sent via SignalR from the page
+ */
+export async function getSignalRSentMessages(page: Page): Promise<any[]> {
+  return await page.evaluate(() => {
+    return (window as any).__signalRSentMessages || [];
+  });
+}
+
+/**
+ * Clear SignalR sent messages
+ */
+export async function clearSignalRSentMessages(page: Page) {
+  await page.evaluate(() => {
+    (window as any).__signalRSentMessages = [];
+  });
+}
+
+/**
+ * Simulate SignalR connection drop
+ */
+export async function simulateSignalRDisconnect(page: Page) {
+  await page.evaluate(() => {
+    const ws = (window as any).__mockWebSocket;
+    if (ws && ws.onclose) {
+      ws.readyState = 3; // CLOSED
+      ws.onclose(new CloseEvent('close'));
+      console.log('[Test] Simulated disconnect');
+    }
+  });
+}
+
+/**
+ * Simulate SignalR reconnection
+ */
+export async function simulateSignalRReconnect(page: Page) {
+  await page.evaluate(() => {
+    const ws = (window as any).__mockWebSocket;
+    if (ws && ws.onopen) {
+      ws.readyState = 1; // OPEN
+      ws.onopen(new Event('open'));
+      console.log('[Test] Simulated reconnect');
+    }
+  });
 }

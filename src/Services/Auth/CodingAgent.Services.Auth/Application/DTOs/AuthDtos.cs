@@ -20,7 +20,8 @@ public record AuthResponse(
     string AccessToken,
     string RefreshToken,
     int ExpiresIn,
-    string TokenType = "Bearer"
+    string TokenType,
+    UserDto User
 );
 
 public record UserDto(

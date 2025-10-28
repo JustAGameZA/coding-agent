@@ -12,13 +12,14 @@ export interface RegisterRequest {
   username: string;
   email: string;
   password: string;
-  confirmPassword?: string; // Used for form validation, not sent to backend
+  confirmPassword: string; // Required by backend for password confirmation validation
 }
 
 export interface LoginResponse {
-  token: string;
+  accessToken: string;  // Backend uses PascalCase -> camelCase JSON serialization
   refreshToken?: string;
   expiresIn: number; // seconds until token expiry
+  tokenType?: string; // e.g., "Bearer"
   user: User;
 }
 
@@ -35,7 +36,9 @@ export interface RefreshTokenRequest {
 }
 
 export interface RefreshTokenResponse {
-  token: string;
+  accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  tokenType?: string;
+  user: User;
 }

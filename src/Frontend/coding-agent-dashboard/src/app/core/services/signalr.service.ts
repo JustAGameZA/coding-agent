@@ -38,7 +38,7 @@ export class SignalRService {
 
     this.hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(environment.chatHubUrl || environment.signalRUrl, {
-        skipNegotiation: true,
+        skipNegotiation: false, // Allow SignalR negotiation through gateway
         transport: signalR.HttpTransportType.WebSockets,
         accessTokenFactory: () => this.auth.getToken() || ''
       })

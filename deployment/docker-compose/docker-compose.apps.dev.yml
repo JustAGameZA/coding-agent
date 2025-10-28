@@ -49,20 +49,28 @@ services:
     container_name: coding-agent-gateway-dev
     working_dir: /workspace/src/Gateway/CodingAgent.Gateway
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5000"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5000"
     ports:
       - "5000:5000"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5000"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Authentication__Jwt__Issuer: "http://localhost:5000"
+      Authentication__Jwt__Audience: "coding-agent-api"
+      Authentication__Jwt__SecretKey: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
     volumes:
       - ../../:/workspace
     depends_on:
       dev-base:
         condition: service_completed_successfully
+      chat-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -93,6 +101,9 @@ services:
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
       OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Jwt__Secret: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
+      Jwt__Issuer: "http://localhost:5000"
+      Jwt__Audience: "coding-agent-api"
     volumes:
       - ../../:/workspace
     depends_on:
@@ -115,13 +126,14 @@ services:
     container_name: coding-agent-orchestration-dev
     working_dir: /workspace/src/Services/Orchestration/CodingAgent.Services.Orchestration
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5002"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5002"
     ports:
       - "5002:5002"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5002"
       DOTNET_USE_POLLING_FILE_WATCHER: "false"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
@@ -147,13 +159,14 @@ services:
     container_name: coding-agent-github-dev
     working_dir: /workspace/src/Services/GitHub/CodingAgent.Services.GitHub
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5004"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5004"
     ports:
       - "5004:5004"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5004"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
@@ -176,13 +189,14 @@ services:
     container_name: coding-agent-browser-dev
     working_dir: /workspace/src/Services/Browser/CodingAgent.Services.Browser
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5005"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5005"
     ports:
       - "5005:5005"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5005"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
@@ -205,7 +219,7 @@ services:
     container_name: coding-agent-cicd-monitor-dev
     working_dir: /workspace/src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor
     command: >-
-      bash -lc "rm -rf obj bin /workspace/src/SharedKernel/CodingAgent.SharedKernel/obj/project.assets.json.lock && dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
+      bash -lc "rm -rf obj bin /workspace/src/SharedKernel/CodingAgent.SharedKernel/obj/project.assets.json.lock && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
     ports:
       - "5006:5006"
     environment:
@@ -213,6 +227,7 @@ services:
       ASPNETCORE_URLS: "http://0.0.0.0:5006"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
       DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
+      RunMigrationsOnStartup: "true"
       ConnectionStrings__CICDMonitorDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-codingagent};Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
       GitHub__Token: "${GITHUB_TOKEN:-}"
       RabbitMQ__Host: rabbitmq
@@ -239,13 +254,14 @@ services:
     container_name: coding-agent-dashboard-bff-dev
     working_dir: /workspace/src/Services/Dashboard/CodingAgent.Services.Dashboard
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5007"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5007"
     ports:
       - "5007:5007"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5007"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
       Services__Chat__BaseUrl: "http://chat-service:5001"
@@ -272,13 +288,14 @@ services:
     container_name: coding-agent-auth-dev
     working_dir: /workspace/src/Services/Auth/CodingAgent.Services.Auth
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5008"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5008"
     ports:
       - "5008:5008"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5008"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       ConnectionStrings__AuthDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       RabbitMQ__Host: rabbitmq
@@ -287,7 +304,7 @@ services:
       OpenTelemetry__Endpoint: "http://jaeger:4317"
       Authentication__Jwt__Issuer: "http://localhost:5000"
       Authentication__Jwt__Audience: "coding-agent-api"
-      Authentication__Jwt__SecretKey: "CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG"
+      Authentication__Jwt__SecretKey: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
       Authentication__Jwt__AccessTokenExpiryMinutes: "15"
       Authentication__Jwt__RefreshTokenExpiryDays: "7"
     volumes:
@@ -312,13 +329,14 @@ services:
     container_name: coding-agent-ollama-dev
     working_dir: /workspace/src/Services/Ollama/CodingAgent.Services.Ollama
     command: >-
-      bash -lc "dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5003"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5003"
     ports:
       - "5003:5003"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5003"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       Services__Ollama__BaseUrl: "http://ollama:11434"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}

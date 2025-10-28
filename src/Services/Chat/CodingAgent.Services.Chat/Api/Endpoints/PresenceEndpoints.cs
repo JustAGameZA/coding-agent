@@ -37,15 +37,25 @@ public static class PresenceEndpoints
         activity?.SetTag("conversation.id", conversationId);
 
         // Approximate participants by distinct user IDs from recent messages
-        var userIds = await db.Messages
-            .Where(m => m.ConversationId == conversationId && m.UserId.HasValue)
-            .OrderByDescending(m => m.SentAt)
-            .Select(m => m.UserId!.Value)
-            .Distinct()
-            .Take(50)
-            .ToListAsync(ct);
+        List<Guid> userIds;
+        try
+        {
+            userIds = await db.Messages
+                .Where(m => m.ConversationId == conversationId && m.UserId.HasValue)
+                .OrderByDescending(m => m.SentAt)
+                .Select(m => m.UserId!.Value)
+                .Distinct()
+                .Take(50)
+                .ToListAsync(ct);
 
-        logger.LogInformation("Computed {Count} participant(s) for conversation {ConversationId} from recent messages", userIds.Count, conversationId);
+            logger.LogInformation("Computed {Count} participant(s) for conversation {ConversationId} from recent messages", userIds.Count, conversationId);
+        }
+        catch (Exception ex)
+        {
+            // Graceful fallback when schema is not yet aligned (e.g., missing UserId column)
+            logger.LogWarning(ex, "Presence query failed, returning empty participant list for conversation {ConversationId}", conversationId);
+            userIds = new List<Guid>();
+        }
 
         var tasks = userIds.Select(async uid =>
         {

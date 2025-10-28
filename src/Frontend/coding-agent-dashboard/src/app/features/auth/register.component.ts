@@ -483,12 +483,13 @@ export class RegisterComponent implements OnInit {
     this.loading.set(true);
     this.errorMessage.set(null);
 
-    const { username, email, password } = this.registerForm.value;
+    const { username, email, password, confirmPassword } = this.registerForm.value;
     
     const request: RegisterRequest = {
       username,
       email,
-      password
+      password,
+      confirmPassword // Backend requires this for validation
     };
 
     this.authService.register(request).subscribe({

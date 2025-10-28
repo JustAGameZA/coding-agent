@@ -126,4 +126,72 @@ export class ChatPage {
   async isTypingIndicatorVisible(): Promise<boolean> {
     return await this.typingIndicator.isVisible();
   }
+  
+  async getTypingIndicatorText(): Promise<string> {
+    return await this.typingIndicator.textContent() || '';
+  }
+  
+  async getOnlineCount(): Promise<number> {
+    const text = await this.onlineCount.textContent();
+    const match = text?.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+  }
+  
+  async waitForMessage(content: string, timeoutMs: number = 5000): Promise<void> {
+    await this.page.waitForFunction(
+      (searchContent) => {
+        const messages = Array.from(document.querySelectorAll('.message, .message-bubble'));
+        return messages.some(msg => msg.textContent?.includes(searchContent));
+      },
+      content,
+      { timeout: timeoutMs }
+    );
+  }
+  
+  async getMessageByContent(content: string): Promise<string> {
+    const message = this.messages.filter({ hasText: content }).first();
+    return await message.textContent() || '';
+  }
+  
+  async typeMessage(text: string): Promise<void> {
+    await this.messageInput.fill(text);
+  }
+  
+  async pressEnterInMessageInput(): Promise<void> {
+    await this.messageInput.press('Enter');
+  }
+  
+  async isMessageInputEmpty(): Promise<boolean> {
+    const value = await this.messageInput.inputValue();
+    return value.trim() === '';
+  }
+  
+  async waitForConnectionStatus(status: 'Connected' | 'Disconnected' | 'Reconnecting', timeoutMs: number = 5000): Promise<void> {
+    await this.page.waitForFunction(
+      (expectedStatus) => {
+        const statusEl = document.querySelector('[data-testid="connection-status"]');
+        if (!statusEl) return false;
+        
+        const hasWifi = statusEl.querySelector('mat-icon')?.textContent?.includes('wifi');
+        const hasWifiOff = statusEl.querySelector('mat-icon')?.textContent?.includes('wifi_off');
+        
+        if (expectedStatus === 'Connected') return hasWifi && !hasWifiOff;
+        if (expectedStatus === 'Disconnected') return hasWifiOff;
+        if (expectedStatus === 'Reconnecting') {
+          return statusEl.classList.contains('reconnecting');
+        }
+        return false;
+      },
+      status,
+      { timeout: timeoutMs }
+    );
+  }
+  
+  async getReconnectingMessage(): Promise<string | null> {
+    const reconnectEl = this.page.locator('.reconnect');
+    if (await reconnectEl.isVisible()) {
+      return await reconnectEl.textContent();
+    }
+    return null;
+  }
 }
