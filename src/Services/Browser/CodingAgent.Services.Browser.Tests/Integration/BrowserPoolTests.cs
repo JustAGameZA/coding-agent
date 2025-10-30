@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
+using Xunit.Sdk;
 
 namespace CodingAgent.Services.Browser.Tests.Integration;
 
@@ -27,6 +28,18 @@ public class BrowserPoolTests : IAsyncDisposable
 
         var optionsMock = new Mock<IOptions<BrowserOptions>>();
         optionsMock.Setup(x => x.Value).Returns(_options);
+
+        // Verify Playwright browsers are installed; otherwise skip
+        try
+        {
+            var playwright = Microsoft.Playwright.Playwright.CreateAsync().GetAwaiter().GetResult();
+            playwright.Chromium.LaunchAsync().GetAwaiter().GetResult();
+            playwright.Dispose();
+        }
+        catch
+        {
+            throw new SkipException("Playwright browsers not installed");
+        }
 
         _browserPool = new BrowserPool(optionsMock.Object, _mockLogger.Object);
     }

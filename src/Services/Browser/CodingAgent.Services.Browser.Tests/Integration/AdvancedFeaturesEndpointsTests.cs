@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using CodingAgent.Services.Browser.Domain.Models;
 using FluentAssertions;
 using Xunit;
+using Xunit.Sdk;
 
 namespace CodingAgent.Services.Browser.Tests.Integration;
 
@@ -29,7 +30,8 @@ public class AdvancedFeaturesEndpointsTests : IClassFixture<BrowserWebApplicatio
         }
         catch
         {
-            // Browsers not installed, tests will be skipped
+            // Browsers not installed, skip suite
+            throw new SkipException("Playwright browsers not installed");
         }
     }
 

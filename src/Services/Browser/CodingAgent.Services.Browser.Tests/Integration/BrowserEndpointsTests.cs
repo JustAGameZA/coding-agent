@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
+using Xunit.Sdk;
 
 namespace CodingAgent.Services.Browser.Tests.Integration;
 
@@ -32,7 +33,8 @@ public class BrowserEndpointsTests : IClassFixture<BrowserWebApplicationFactory>
         }
         catch
         {
-            // Browsers not installed, tests will be skipped
+            // Browsers not installed, skip suite
+            throw new SkipException("Playwright browsers not installed");
         }
     }
 
