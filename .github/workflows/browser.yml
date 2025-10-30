@@ -33,6 +33,11 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
@@ -47,16 +52,40 @@ jobs:
       - name: Build
         run: dotnet build CodingAgent.sln -c Release --no-restore
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (dotnet tool preferred with fallback)
+        shell: bash
         run: |
-          dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Debug
-          pwsh -File src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.ps1 install --with-deps
+          set -e
+          echo "Attempting to install Playwright browsers via .NET tool (preferred)"
+          # Try restoring any local tools (non-fatal if none configured)
+          dotnet tool restore || true
+          if dotnet tool list | grep -iq "playwright"; then
+            echo "Found Microsoft.Playwright.CLI in tool manifest"
+            dotnet tool run playwright install --with-deps
+          else
+            echo "Microsoft.Playwright.CLI not found in tool manifest. Falling back..."
+            # Fallback 1: use project-generated Playwright script
+            dotnet build src/Services/Browser/CodingAgent.Services.Browser/CodingAgent.Services.Browser.csproj -c Debug --no-restore
+            if [ -f src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.sh ]; then
+              bash src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.sh install --with-deps
+            elif [ -f src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.ps1 ]; then
+              pwsh -File src/Services/Browser/CodingAgent.Services.Browser/bin/Debug/playwright.ps1 install --with-deps
+            else
+              echo "Project script not found. Using npx playwright as last resort"
+              npx --yes playwright install --with-deps
+            fi
+          fi
 
       - name: Test (Unit only)
         run: >-
           dotnet test CodingAgent.sln -c Release --no-build --no-restore
           --settings ./.runsettings --filter "Category=Unit"
           --logger "trx;LogFileName=test_results.trx"
+
+      - name: Test (Integration - Browser service only)
+        run: >-
+          dotnet test src/Services/Browser/CodingAgent.Services.Browser.Tests
+          --filter "Category=Integration" --verbosity quiet --nologo --no-build
 
       - name: Conditional Docker build
         if: success()

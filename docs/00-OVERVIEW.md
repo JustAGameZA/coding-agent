@@ -133,13 +133,14 @@ A **modular AI coding assistant platform** that helps developers:
 | Service | Responsibility | Technology | Port |
 |---------|---------------|------------|------|
 | **API Gateway** | Single entry point, routing, auth | YARP (.NET 9) | 5000 |
+| **Auth Service** | JWT authentication, user management | .NET 9 + BCrypt | 5007 |
 | **Chat Service** | Real-time WebSocket chat, conversation mgmt | .NET 9 + SignalR | 5001 |
 | **Orchestration Service** | Task execution, agent orchestration | .NET 9 | 5002 |
 | **ML Classifier** | Task classification, ML inference | Python (FastAPI) | 5003 |
 | **GitHub Service** | Repository ops, PR creation, webhooks | .NET 9 | 5004 |
 | **Browser Service** | Playwright automation, web scraping | .NET 9 | 5005 |
 | **CI/CD Monitor** | Build monitoring, automated fixes | .NET 9 | 5006 |
-| **Dashboard Service** | BFF for Angular frontend | .NET 9 | 5007 |
+| **Dashboard Service** | BFF for Angular frontend | .NET 9 | 5003 |
 | **Ollama Service** | Local LLM provider, on-premise inference | .NET 9 | 5008 |
 
 ---
@@ -258,25 +259,66 @@ A **modular AI coding assistant platform** that helps developers:
 
 ### Authentication Flow
 
+**Implementation**: ✅ Production-ready Auth Service (see `docs/AUTH-IMPLEMENTATION.md`)
+
 ```
-1. User → API Gateway: POST /auth/login (username, password)
-2. Gateway → Auth Service: Validate credentials
-3. Auth Service → Database: Verify user
-4. Auth Service → Gateway: Return JWT (access + refresh tokens)
-5. Gateway → User: Set HttpOnly cookie + return tokens
+1. User → Gateway: POST /api/auth/login (username, password)
+2. Gateway → Auth Service: Forward request
+3. Auth Service: 
+   - Verify user exists and is active
+   - Verify password (BCrypt work factor 12)
+   - Generate JWT access token (15min, HS256)
+   - Generate refresh token (7 days, SHA256 hashed)
+   - Create session record (IP + User-Agent tracking)
+4. Auth Service → Gateway: Return tokens
+5. Gateway → User: { accessToken, refreshToken, expiresIn: 900 }
+```
+
+**Token Refresh Flow** (with rotation):
+```
+1. User → Gateway: POST /api/auth/refresh (refreshToken)
+2. Auth Service:
+   - Validate refresh token (check expiry, revocation)
+   - Revoke old refresh token (rotation)
+   - Generate new access + refresh tokens
+3. Auth Service → User: New token pair
 ```
 
 ### Authorization
 
-- **JWT Claims**: `sub` (user ID), `role`, `permissions`, `exp`
-- **Role-Based Access Control (RBAC)**: Admin, Developer, Viewer
-- **Service-to-Service**: API Key in `X-API-Key` header (validated by Gateway)
+- **JWT Claims**: 
+  - `sub`: User ID (GUID)
+  - `unique_name`: Username
+  - `email`: User email
+  - `role`: User roles (array, e.g., ["User", "Admin"])
+  - `jti`: JWT ID (unique token identifier)
+  - `exp`: Expiration (Unix timestamp, 15 minutes from issue)
+  - `iss`: "CodingAgent"
+  - `aud`: "CodingAgent.API"
+
+- **Role-Based Access Control (RBAC)**: 
+  - User: Default role for all registered users
+  - Admin: Future feature (user management, system config)
+  
+- **Service-to-Service**: API Key in `X-API-Key` header (entity exists, endpoints pending)
+
+- **Protected Endpoints**: Use `[Authorize]` attribute, JWT validated by Gateway
 
 ### Secrets Management
 
-- **Development**: .NET User Secrets + Environment Variables
-- **Production**: Azure Key Vault / AWS Secrets Manager / Kubernetes Secrets
-- **Rotation**: Automated via CI/CD pipeline (90-day rotation)
+- **Development**: 
+  - JWT secret in appsettings.Development.json (dev-only secret)
+  - Database connection string in environment variables
+  
+- **Production**: 
+  - JWT secret from environment variable (required)
+  - Secrets stored in Azure Key Vault / AWS Secrets Manager / Kubernetes Secrets
+  - No hardcoded secrets in code (enforced by startup validation)
+  
+- **Rotation**: 
+  - JWT secret: Manual rotation (requires service restart)
+  - Refresh tokens: Automatic rotation on each refresh (security best practice)
+  - Database credentials: Automated via infrastructure (90-day rotation recommended)
 
 ---
 

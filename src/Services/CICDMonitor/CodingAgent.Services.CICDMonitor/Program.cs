@@ -61,13 +61,19 @@ builder.Services.AddDbContext<CICDMonitorDbContext>(options =>
 builder.Services.AddSingleton<Octokit.IGitHubClient>(sp =>
 {
     var githubToken = builder.Configuration["GitHub:Token"];
-    var client = new Octokit.GitHubClient(new ProductHeaderValue("CodingAgent-CICDMonitor"));
-    
+    // Always target the real GitHub API (or GHES if configured) for Actions endpoints.
+    // Use separate key from our internal GitHub microservice to avoid misrouting.
+    var githubApiBaseUrl = builder.Configuration["GitHub:ApiBaseUrl"] ?? "https://api.github.com";
+
+    var client = new Octokit.GitHubClient(
+        new ProductHeaderValue("CodingAgent-CICDMonitor"),
+        new Uri(githubApiBaseUrl));
+
     if (!string.IsNullOrEmpty(githubToken))
     {
         client.Credentials = new Credentials(githubToken);
     }
-    
+
     return client;
 });
 

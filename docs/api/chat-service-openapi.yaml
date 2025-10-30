@@ -1,0 +1,507 @@
+openapi: 3.1.0
+info:
+  title: Chat Service API
+  version: 0.1.0
+  description: |
+    REST API for conversations, messages, attachments, and real-time agent messaging.
+    All endpoints require JWT Bearer authentication unless stated otherwise.
+  contact:
+    name: Coding Agent Team
+    url: https://github.com/zerith-jag/coding-agent
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5002
+    description: Local Chat Service
+  - url: http://localhost:5000
+    description: Gateway (routes to Chat)
+
+tags:
+  - name: Conversations
+    description: Conversation management
+  - name: Attachments
+    description: File attachments (multipart upload)
+  - name: SignalR
+    description: Real-time messaging via SignalR hub
+  - name: Agent
+    description: Orchestration callbacks and agent interaction
+
+security:
+  - bearerAuth: []
+
+paths:
+  /conversations:
+    get:
+      tags: [Conversations]
+      summary: List conversations
+      description: Returns the current user's conversations.
+      operationId: listConversations
+      parameters:
+        - in: query
+          name: page
+          description: 1-based page index
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: pageSize
+          description: Items per page (max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationDto'
+              examples:
+                sample:
+                  value:
+                    - id: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                      userId: "db0f6a8a-1a5a-4bb0-9d6d-8b64b8421a10"
+                      title: "Refactor ChatService repository"
+                      createdAt: "2025-10-27T12:00:00Z"
+                      updatedAt: "2025-10-27T12:15:00Z"
+                      messages: []
+
+    post:
+      tags: [Conversations]
+      summary: Create conversation
+      description: Creates a new conversation for the current user.
+      operationId: createConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationRequest'
+            examples:
+              create:
+                value:
+                  title: "Release planning notes"
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: Resource URL of the created conversation
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDto'
+              examples:
+                created:
+                  value:
+                    id: "5c5f4a0a-47a3-4ee4-8d38-8d4a3a5c7f21"
+                    userId: "db0f6a8a-1a5a-4bb0-9d6d-8b64b8421a10"
+                    title: "Release planning notes"
+                    createdAt: "2025-10-27T12:30:00Z"
+                    updatedAt: "2025-10-27T12:30:00Z"
+                    messages: []
+        '400':
+          description: Validation error
+
+  "/conversations/{id}":
+    get:
+      tags: [Conversations]
+      summary: Get conversation by id
+      operationId: getConversationById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDto'
+        '404':
+          description: Not found
+
+  "/conversations/{id}/agent-response":
+    post:
+      tags: [Agent]
+      summary: Post AI agent response to conversation
+      description: |
+        Called by the Orchestration Service after AI processing completes.
+        Persists the agent's message and broadcasts it to the user via SignalR.
+        Only accessible by authenticated services (not end users).
+      operationId: postAgentResponse
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: Agent response text
+                  minLength: 1
+                  maxLength: 10000
+                  example: "I've analyzed your code and found 3 potential improvements..."
+      responses:
+        '202':
+          description: Agent response accepted and broadcast to user via SignalR
+        '404':
+          description: Conversation not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '400':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblemDetails'
+        '401':
+          description: Unauthorized (missing or invalid service token)
+
+  /attachments:
+    post:
+      tags: [Attachments]
+      summary: Upload attachment
+      description: Uploads a file attachment associated with a conversation.
+      operationId: uploadAttachment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                conversationId:
+                  type: string
+                  format: uuid
+                fileName:
+                  type: string
+                  description: Optional override for the filename
+                contentType:
+                  type: string
+                  description: MIME type of the uploaded file
+              required: [file, conversationId]
+            examples:
+              upload:
+                summary: Example multipart parts
+                value:
+                  conversationId: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                  fileName: "design.png"
+                  contentType: "image/png"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentDto'
+              examples:
+                created:
+                  value:
+                    id: "f2b9c3a8-4f2e-49a7-a3e9-2c7a0f6c9a11"
+                    conversationId: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+                    fileName: "design.png"
+                    contentType: "image/png"
+                    sizeBytes: 345678
+                    url: "https://files.local/attachments/f2b9c3a8-4f2e-49a7-a3e9-2c7a0f6c9a11"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+        ProblemDetails:
+          type: object
+          properties:
+            type:
+              type: string
+            title:
+              type: string
+            status:
+              type: integer
+            detail:
+              type: string
+            instance:
+              type: string
+
+        ValidationProblemDetails:
+          allOf:
+            - $ref: '#/components/schemas/ProblemDetails'
+            - type: object
+              properties:
+                errors:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: string
+    CreateConversationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [title]
+
+    ConversationDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageDto'
+      required: [id, userId, title, createdAt, updatedAt]
+
+    MessageDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          description: Message role
+          enum: [User, Assistant, System]
+        content:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentDto'
+      required: [id, conversationId, role, content, sentAt]
+
+    AttachmentDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        url:
+          type: string
+          format: uri
+      required: [id, conversationId, fileName, contentType, sizeBytes]
+
+    AgentResponseEvent:
+      type: object
+      description: |
+        Published by Orchestration Service when AI generates a response.
+        Consumed by Chat Service to broadcast to user via SignalR.
+      required:
+        - conversationId
+        - messageId
+        - content
+        - generatedAt
+      properties:
+        conversationId:
+          type: string
+          format: uuid
+          description: The conversation ID
+          example: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+        messageId:
+          type: string
+          format: uuid
+          description: The generated message ID
+          example: "9a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+        content:
+          type: string
+          description: Agent response text
+          minLength: 1
+          maxLength: 10000
+          example: "I've analyzed your code and found 3 potential improvements..."
+        generatedAt:
+          type: string
+          format: date-time
+          description: When the agent generated the response
+          example: "2025-10-28T12:35:02Z"
+        tokensUsed:
+          type: integer
+          nullable: true
+          description: Optional token usage for the AI model
+          example: 150
+        model:
+          type: string
+          nullable: true
+          description: Optional AI model used (e.g., "gpt-4o", "claude-3.5-sonnet")
+          example: "gpt-4o"
+
+# SignalR Hub Documentation
+x-signalr:
+  hub: /hubs/chat
+  description: |
+    Real-time messaging hub for user-to-AI agent communication.
+    Requires JWT authentication via query string (?access_token=...) or Authorization header.
+  
+  server-to-client-methods:
+    ReceiveMessage:
+      description: Broadcasts a message to conversation participants (user or agent)
+      parameters:
+        - name: message
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              conversationId:
+                type: string
+                format: uuid
+              userId:
+                type: string
+                format: uuid
+                nullable: true
+                description: User ID (null for agent messages)
+              content:
+                type: string
+              role:
+                type: string
+                enum: [User, Assistant, System]
+              sentAt:
+                type: string
+                format: date-time
+              metadata:
+                type: object
+                nullable: true
+                properties:
+                  tokensUsed:
+                    type: integer
+                  model:
+                    type: string
+      example:
+        id: "3f2c9a1b-4e5f-6a7b-8c9d-0e1f2a3b4c5d"
+        conversationId: "7e4c0c8b-8b1c-4c9d-86a2-6bf6e6e9c001"
+        userId: null
+        content: "I've analyzed your code. Here are 3 improvements..."
+        role: "Assistant"
+        sentAt: "2025-10-28T12:35:02Z"
+        metadata:
+          tokensUsed: 150
+          model: "gpt-4o"
+    
+    AgentTyping:
+      description: Indicates when the AI agent is processing a request
+      parameters:
+        - name: isTyping
+          schema:
+            type: boolean
+          description: true when agent starts processing, false when response is sent
+      example: true
+  
+  client-to-server-methods:
+    JoinConversation:
+      description: Joins a conversation group to receive real-time updates
+      parameters:
+        - name: conversationId
+          schema:
+            type: string
+            format: uuid
+          required: true
+      returns:
+        type: void
+    
+    LeaveConversation:
+      description: Leaves a conversation group
+      parameters:
+        - name: conversationId
+          schema:
+            type: string
+            format: uuid
+          required: true
+      returns:
+        type: void
+    
+    SendMessage:
+      description: |
+        Sends a user message to the conversation.
+        Triggers AI processing via event bus (MessageSentEvent → Orchestration Service).
+        Returns immediately (optimistic UI), agent response arrives via ReceiveMessage event.
+      parameters:
+        - name: conversationId
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - name: content
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 10000
+          required: true
+      returns:
+        type: void
+      behavior: |
+        1. Persists user message to database
+        2. Echoes message back to user via ReceiveMessage
+        3. Emits AgentTyping: true
+        4. Publishes MessageSentEvent to RabbitMQ
+        5. Orchestration Service processes and publishes AgentResponseEvent
+        6. Chat Service receives AgentResponseEvent
+        7. Broadcasts agent response via ReceiveMessage
+        8. Emits AgentTyping: false

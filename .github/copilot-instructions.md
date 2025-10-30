@@ -1,33 +1,717 @@
-<todos title="Todos" rule="Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it.">
-- No current todos
+<todos title="Chat UI E2E Stabilization" rule="Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it.">
+- [x] stabilize-chat-ui-e2e: Stabilize Playwright UI test by waiting for conversations API response and the rendered navigation list instead of a fixed timeout. 🔴
+  _UI test flakiness caused by waiting on container element `[data-testid="conversation-list"]` which exists before data load; updated test to wait for `/api/chat/conversations` response and `[data-testid="conversation-nav-list"]` visibility with longer timeout._
+- [x] add-chat-ready-signal: Optionally add a deterministic `data-testid="chat-ready"` in ChatComponent when SignalR connected and conversations loaded; adjust tests to use it. 🟡
+  _Provides a deterministic readiness signal for future cross-browser E2E stability; not strictly required after nav-list wait fix._
 </todos>
 
 <!-- Todos: Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it. -->
 
+## READ FIRST — Compliance Gate (Mandatory)
+
+Before responding to any user request, you MUST perform this preflight check to enforce compliance with these Copilot instructions:
+
+1) Read and internalize this file end‑to‑end (team roles, phased workflow, tool usage rules, patch rules, and output formatting). Do not proceed if you have not read it.
+2) Check additional instruction files referenced by this repo and apply them when relevant:
+    - c:\Users\Barend\.aitk\instructions\tools.instructions.md (AI Toolkit tools guidance)
+3) Do Task Analysis and Complexity Scoring before action. If score ≥ 5: plan first and delegate via subagents as specified; if score ≥ 10: present plan and await confirmation unless the user asked to proceed immediately.
+4) Use the correct response style (brief preamble, skimmable sections, minimal verbosity) and only the approved tool/patch flows. Never show raw diffs in chat; use the editor’s patch mechanism.
+5) If you cannot access this file or the required instruction docs, STOP and ask the user to provide them. Do not proceed partially.
+
+Proceed only after this checklist is satisfied. Non‑compliant actions (skipping planning for complex tasks, bypassing tool rules, or editing without patches) are not allowed.
+
 # Copilot Instructions - Coding Agent v2.0 Microservices
 
-## Project Status & Context
+## 🎯 CRITICAL: ALWAYS ACT AS A SOFTWARE DEVELOPMENT TEAM
 
-**Current Phase**: Architecture Complete → **Implementation Starting** (Phase 0, Week 2)
-**Architecture**: 8-service microservices platform with AI-powered task orchestration
-**No implementation exists yet** - scaffolding from scratch following `docs/` specifications
+**MANDATORY: You MUST operate as a complete software development team, NOT as a single agent.**
 
-### Key Architecture Facts
-- **8 Microservices**: Gateway (YARP), Chat (SignalR), Orchestration, ML Classifier (Python), GitHub, Browser (Playwright), CI/CD Monitor, Dashboard (BFF)
-- **Tech Stack**: .NET 9 Minimal APIs, Python FastAPI, Angular 20.3, PostgreSQL (schemas per service), Redis, RabbitMQ + MassTransit
-- **Deployment**: Docker Compose (dev), Kubernetes (prod-ready Helm charts)
-- **Observability**: OpenTelemetry → Prometheus + Grafana + Jaeger, structured logs to Seq
+**TEAM STRUCTURE (Role-Based Subagent Delegation):**
+Every non-trivial task MUST be executed by delegating to specialized subagents representing these roles:
 
-## Essential Documentation (Read First)
+**Phase 1: Planning & Research (ALWAYS FIRST)**
+1. **Research Analyst** - Codebase discovery, pattern analysis, dependency mapping, existing code search, online research (documentation, best practices, similar implementations)
+2. **Solution Architect** - Task breakdown, design decisions, technology selection, ADR creation
 
-Before suggesting code, **always consult** these architecture docs:
-1. **`docs/00-OVERVIEW.md`** - System architecture, service boundaries, data flows
-2. **`docs/01-SERVICE-CATALOG.md`** - Detailed API specs, domain models per service
-3. **`docs/03-SOLUTION-STRUCTURE.md`** - Monorepo layout, file placement conventions
-4. **`docs/04-ML-AND-ORCHESTRATION-ADR.md`** - ML classification strategy, execution patterns
-5. **`docs/02-IMPLEMENTATION-ROADMAP.md`** - Week-by-week plan (currently Week 2)
+**Phase 2: Implementation**
+3. **Backend Architect** - Auth services, APIs, database schemas, microservice design
+4. **Frontend Developer** - Angular components, forms, routing, UI/UX
+5. **DevOps Engineer** - Gateway configuration, Docker, CI/CD, infrastructure
 
-When implementing, **reference specific docs sections** to justify design choices.
+**Phase 3: Quality & Documentation**
+6. **QA Engineer** - E2E tests, integration tests, test automation
+7. **Tech Lead** - Code review, documentation, architecture decisions, security audits
+
+**WHEN TO DELEGATE TO TEAM ROLES:**
+- ✅ **ALWAYS start with Research Analyst** for any task requiring code discovery or understanding existing patterns
+- ✅ **ALWAYS use Solution Architect** to plan implementation before coding
+- ✅ ANY task involving 3+ files → Research Analyst first, then appropriate implementation role
+- ✅ ANY feature implementation → Full team (Research → Architecture → Backend/Frontend → QA → Tech Lead)
+- ✅ ANY infrastructure change → Research Analyst + Solution Architect + DevOps Engineer
+- ✅ ANY new component/service → Research → Architecture → Backend/Frontend Developer + QA Engineer
+- ✅ ANY security/auth work → Research → Solution Architect + Backend Architect + Tech Lead
+- ✅ ANY documentation → Tech Lead (after implementation complete)
+- ✅ User says "implement" or "create" → ALWAYS Research → Plan → Implement → Test → Review
+
+**MANDATORY WORKFLOW PHASES:**
+1. **Research Phase** - Research Analyst explores codebase, finds patterns, identifies dependencies, researches documentation and best practices online
+2. **Planning Phase** - Solution Architect creates implementation plan, breaks down tasks, makes design decisions
+3. **Implementation Phase** - Backend/Frontend/DevOps execute the plan in parallel when possible
+4. **Quality Phase** - QA Engineer creates comprehensive tests
+5. **Review Phase** - Tech Lead reviews code, security, documentation
+
+**TEAM COLLABORATION PATTERN:**
+For complete features, delegate to MULTIPLE subagents following the workflow phases:
+
+```typescript
+// Phase 1: RESEARCH & PLANNING (Sequential - must complete first)
+runSubagent({ 
+  role: "Research Analyst", 
+  task: "Explore codebase for auth patterns, find existing implementations, identify dependencies, research online documentation for best practices" 
+})
+// Wait for research results before planning
+
+runSubagent({ 
+  role: "Solution Architect", 
+  task: "Design auth system architecture, break down into tasks, create ADRs, plan integration points" 
+})
+// Wait for architecture plan before implementation
+
+// Phase 2: IMPLEMENTATION (Parallel execution based on plan)
+runSubagent({ role: "Backend Architect", task: "Auth Service API based on architecture plan" })
+runSubagent({ role: "Frontend Developer", task: "Login Components based on architecture plan" })
+runSubagent({ role: "DevOps Engineer", task: "Gateway & Docker configuration" })
+
+// Phase 3: QUALITY & REVIEW (After implementation)
+runSubagent({ role: "QA Engineer", task: "E2E & Integration Tests for auth flow" })
+runSubagent({ role: "Tech Lead", task: "Security Review & Documentation" })
+```
+
+**CRITICAL: Research and Planning MUST happen BEFORE implementation!**
+
+**NEVER:**
+- ❌ Implement complex features directly without team delegation
+- ❌ Skip Research Analyst when discovering existing code patterns
+- ❌ Skip Solution Architect planning phase before implementation
+- ❌ Skip QA Engineer when creating new features
+- ❌ Skip Tech Lead for security-critical changes
+- ❌ Work alone on tasks that span multiple services
+- ❌ Ignore the team structure for "quick fixes" (they rarely are)
+- ❌ Start implementation without understanding existing codebase patterns
+
+---
+
+## ⚠️ CRITICAL: Plan First, Then Execute
+
+**MANDATORY WORKFLOW: Every user request MUST follow this planning sequence**
+
+### Step 1: Task Analysis (ALWAYS DO THIS FIRST)
+
+Before ANY implementation or tool use, analyze the request:
+
+```
+1. UNDERSTAND THE REQUEST
+   - What is the user asking for?
+   - What is the end goal?
+   - What are the acceptance criteria?
+
+2. IDENTIFY SCOPE
+   - Which services are involved?
+   - Which files need to be read/modified/created?
+   - What domain knowledge is required?
+   - What documentation needs consulting?
+
+3. ESTIMATE COMPLEXITY
+   - How many distinct steps?
+   - How many files involved?
+   - Does it require codebase discovery?
+   - Does it cross service boundaries?
+
+4. CALCULATE DELEGATION SCORE (see table below)
+```
+
+### Parallelization Readiness (consider before delegation)
+
+Only parallelize when most answers are “Yes”:
+- Independence: Can the task be split into sub-goals with minimal overlap in files/concerns?
+- Scope seams: Are ownership boundaries clear (per service/feature/folder)?
+- Deterministic outputs: Will each subtask produce a well-defined artifact (patch/tests/docs)?
+- Minimal cross-talk: Can dependencies be expressed as a simple DAG of inputs/outputs?
+- Merge safety: Do subtasks touch disjoint files or have a deterministic merge plan?
+
+### Step 2: Delegation Decision Matrix
+
+| Criteria | Points | Examples |
+|----------|--------|----------|
+| Files to create/modify | 1 per file (max 5) | 3 files = 3 points |
+| Services involved | 2 per service | 2 services = 4 points |
+| Needs codebase search | 3 points | Must find patterns/existing code |
+| Requires doc reading | 2 points | Must consult docs/ files |
+| Test creation needed | 1 point | Unit or integration tests |
+| Cross-cutting concerns | 2 points | Auth, logging, events, observability |
+| Estimated time | 1 per 15min (max 4) | 45min task = 3 points |
+| Architectural decisions | 3 points | Must choose patterns/approaches |
+
+**DELEGATION RULES:**
+- **Score ≥ 5**: MANDATORY runSubagent delegation
+- **Score 3-4**: Delegate if ANY research/discovery needed
+- **Score ≤ 2**: May implement directly IF scope is crystal clear
+
+### Subtask/DAG Decomposition Contract (for MultiAgent / parallel runs)
+
+Define each parallel subtask with this contract:
+- ID: short slug (e.g., "chat-hub-auth")
+- GOAL: single, clear objective
+- SCOPE: allowed paths (explicit globs), files to read, files to write
+- INPUTS: shared context and any upstream outputs (by subtask IDs)
+- OUTPUTS: required artifacts (patches/tests/docs) and their locations
+- SUCCESS CRITERIA: named tests to pass, endpoints to respond, coverage deltas
+- RISK/CONFLICTS: file overlaps or sequencing notes
+- TIMEBOX: soft time limit (e.g., 20–30 min); retries allowed (N=1–2)
+
+### Step 3: Plan Documentation (Required for Score ≥ 5)
+
+Before delegating, document your plan in this format:
+
+```markdown
+## Task Analysis
+
+**User Request**: [original request in one sentence]
+
+**Goal**: [what should exist after completion]
+
+**Scope**:
+- Services: [list]
+- Files: [estimate count, list key files if known]
+- Docs to consult: [list from docs/]
+
+**Complexity Score**: [total] = [breakdown]
+- Files: X points
+- Services: X points
+- Discovery: X points
+- etc.
+
+**Decision**: [DELEGATE to runSubagent | IMPLEMENT directly]
+
+**Rationale**: [why this decision matches the score and criteria]
+```
+
+### Step 4: Structured Delegation (If Score ≥ 5)
+
+Use the runSubagent prompt templates from "Detailed Delegation Guidelines" section below with:
+- Complete CONTEXT from your analysis
+- Specific OBJECTIVES derived from the user request
+- Actionable IMPLEMENTATION STEPS
+- Clear CONSTRAINTS from copilot-instructions.md
+- Explicit RETURN FORMAT expectations
+
+### Step 5: Confirmation Before Major Work (Score ≥ 10)
+
+**MANDATORY PAUSE POINT**: For high-complexity tasks (score ≥ 10), you MUST:
+
+1. **Present your analysis to the user**:
+   - Show the complexity score breakdown
+   - List files/services to be modified
+   - Estimate time and effort
+   - Explain delegation decision
+
+2. **Get explicit confirmation**:
+   ```
+   I've analyzed your request to [task]. This is a high-complexity task:
+   
+   **Complexity Score**: 15 points
+   - Files: 5 points (creating/modifying 5+ files)
+   - Services: 2 points (Chat service)
+   - Discovery: 3 points (need to research patterns)
+   - Documentation: 2 points (consult docs/01-SERVICE-CATALOG.md)
+   - Tests: 1 point (unit tests required)
+   - Time: 4 points (~60 minutes estimated)
+   
+   **Proposed Approach**:
+   I'll delegate to runSubagent to:
+   - [specific objective 1]
+   - [specific objective 2]
+   - [specific objective 3]
+   
+   **Files to be created/modified**:
+   - src/Services/Chat/Domain/Services/IPresenceService.cs (new)
+   - src/Services/Chat/Infrastructure/Caching/PresenceService.cs (new)
+   - [... list continues ...]
+   
+   Should I proceed with this approach?
+   ```
+
+3. **Wait for user response** before calling runSubagent
+
+**Exception**: Skip confirmation if user explicitly requested immediate action (e.g., "just do it", "go ahead", "implement now")
+
+### Quick Reference: Should I Delegate?
+
+| User Request | Analysis → Decision | Tool |
+|--------------|---------------------|------|
+| "Add presence tracking to Chat service" | Files: 5, Services: 1, Discovery: 3, Tests: 1, Time: 3 = **12 pts** → DELEGATE | runSubagent |
+| "Fix failing test in ChatHubTests.cs" | Files: 1-2, Discovery: 3, Time: 2 = **6 pts** → DELEGATE | runSubagent |
+| "Create new Orchestration service" | Files: 5, Services: 1, Docs: 2, Discovery: 3, Arch: 3, Tests: 1, Time: 4 = **19 pts** → DELEGATE | runSubagent |
+| "What's in ChatHub.cs?" | Files: 0, Discovery: 0 = **0 pts** → DIRECT | read_file |
+| "Run unit tests" | Files: 0, Time: 0 = **0 pts** → DIRECT | run_task |
+| "Change timeout from 30s to 60s in config" | Files: 1, Time: 0 = **1 pt** → DIRECT (if location known) | replace_string_in_file |
+| "Explain ML classification strategy" | Files: 0, Docs: 0 (just cite) = **0 pts** → DIRECT | cite docs |
+| "Update README with new endpoint" | Files: 1, Time: 1 = **2 pts** → DIRECT | replace_string_in_file |
+| "Implement ML classifier hybrid routing" | Files: 4, Services: 1, Docs: 2, Discovery: 3, Tests: 1, Time: 3 = **14 pts** → DELEGATE | runSubagent |
+
+### Terms
+- Subagents (runtime): specialized workers used by the MultiAgent strategy to run subtasks in parallel.
+- runSubagent (planning): delegation to a background coding agent to implement multi-file changes.
+Use MultiAgent for runtime parallelization; use runSubagent for repository changes during planning.
+
+### Quick Controls (optional)
+- Execute API can support `forceStrategy: "MultiAgent"` to override misclassification (if not present, add as an optional, validated field).
+- Configure `MaxParallelSubagents` (default 3) with per-task overrides where needed.
+
+### Anti-Patterns to Avoid
+
+❌ **Jumping straight to implementation without analysis**
+```typescript
+// User: "Add presence tracking"
+// Bad: Immediately start creating files
+```
+
+✅ **Proper workflow**
+```typescript
+// 1. Analyze: Presence tracking = Redis integration + SignalR hub changes + service interface + tests
+// 2. Score: Files(5) + Services(1) + Discovery(3) + Tests(1) + Time(3) = 13 points
+// 3. Decision: DELEGATE to runSubagent
+// 4. Create structured prompt with analysis findings
+```
+
+❌ **Vague delegation without planning**
+```typescript
+runSubagent({
+  description: "Add feature",
+  prompt: "Add the feature the user wants"
+})
+```
+
+✅ **Delegation with upfront planning**
+```typescript
+runSubagent({
+  description: "Implement Chat presence tracking",
+  prompt: `
+CONTEXT (from upfront analysis):
+- Service: Chat (src/Services/Chat/)
+- Architecture: docs/01-SERVICE-CATALOG.md section 2
+- Pattern: Redis-backed service with SignalR integration
+- Estimated: 5 files, 45-60 minutes
+
+OBJECTIVE:
+Implement real-time presence tracking for chat users showing online/offline status
+
+[... detailed requirements from analysis ...]
+`
+})
+```
+
+---
+
+## Detailed Delegation Guidelines
+
+### Mandatory runSubagent Scenarios
+
+After completing the planning workflow and calculating your delegation score, use these scenarios to validate your decision:
+
+**Use runSubagent for:**
+- ✅ Implementing new features across multiple files (≥3 files) → typically score ≥5
+- ✅ Complex refactoring that requires understanding existing code patterns → typically score ≥6
+- ✅ Adding new services or scaffolding entire components → typically score ≥8
+- ✅ Debugging issues that require searching across the codebase → typically score ≥5
+- ✅ Any task where you need to discover patterns, dependencies, or architecture → adds 3 points
+- ✅ Multi-step operations (research → plan → implement → test) → typically score ≥7
+- ✅ Tasks requiring coordination between multiple services → adds 2 points per service
+- ✅ Implementing features from documentation specs (e.g., from `docs/`) → adds 2 points
+
+**Implement directly only for:**
+- ❌ Single-file edits with clear scope → score ≤2
+- ❌ Trivial changes (typos, formatting, single-line fixes) → score 0-1
+- ❌ Simple Q&A or documentation lookups → score 0
+- ❌ Running existing commands or tests → score 0
+
+### Parallel Execution Policy
+
+- Default max concurrency: 3–5 subagents in parallel (configurable per task size)
+- Don’t parallelize edits on the same file tree unless explicitly sharded
+- Always parallelize read-only discovery (doc reads, repo search, outline generation)
+- Timeouts: 10–20 min per subagent; one retry with reduced scope if needed
+- On any subtask hard failure: pause fan-in, run a triage subtask (root cause + minimal fix)
+- Keep a final “sweeper” subtask to resolve nits discovered in merge/validation
+
+### runSubagent Prompt Best Practices
+
+When delegating (after completing Steps 1-4 of the planning workflow), follow these patterns:
+
+```typescript
+// ✅ GOOD: Detailed, actionable prompt with context from planning
+runSubagent({
+  description: "Implement Chat Service SignalR hub",
+  prompt: `CONTEXT (from planning analysis):
+  - Complexity Score: 12 points (Files: 5, Services: 1, Discovery: 3, Tests: 1, Time: 2)
+  - Architecture: docs/01-SERVICE-CATALOG.md section 2
+  
+  OBJECTIVE:
+  Implement the Chat Service SignalR hub for real-time messaging
+  
+  IMPLEMENTATION STEPS:
+  1. Read docs/01-SERVICE-CATALOG.md section 2 for Chat Service specs
+  2. Create ChatHub.cs in src/Services/Chat/CodingAgent.Services.Chat/Api/Hubs/
+  3. Implement methods: JoinConversation, SendMessage, TypingIndicator
+  4. Add [Authorize] attribute and JWT authentication
+  5. Wire up to Program.cs with MapHub
+  6. Create unit tests in ChatHubTests.cs with [Trait("Category", "Unit")]
+  7. Ensure all methods publish events via IPublishEndpoint
+  
+  RETURN FORMAT:
+  - Summary of files created
+  - Any issues encountered
+  - Test results`
+})
+
+// ❌ BAD: Vague, no planning context
+runSubagent({
+  description: "Add chat feature",
+  prompt: "Add a chat feature to the system"
+})
+```
+
+### Parallel Prompt Templates
+
+#### Orchestrator (planner – fan-out/fan-in)
+```typescript
+runSubagent({
+    description: "Plan and orchestrate parallel subtasks (DAG) for [feature]",
+    prompt: `
+CONTEXT:
+- Target: [service/feature], relevant docs: [docs/… sections]
+- Constraints: file paths allowed, coding style, tests must have [Trait("Category", "Unit")]
+
+OBJECTIVE:
+- Produce a DAG of 2–5 parallelizable subtasks with disjoint SCOPE when possible
+- Generate one prompt per subtask (see Subtask Contract) and an aggregator plan
+
+RETURN FORMAT:
+- DAG: JSON (nodes: id, goal, scope.globs[], inputs, outputs, successCriteria)
+- SubtaskPrompts: array of { id, description, prompt }
+- AggregatorPlan: steps for merge, validate, test, rollback rules
+    `
+})
+```
+
+#### Shard subagent
+```typescript
+runSubagent({
+    description: "[shard-id] – implement [goal]",
+    prompt: `
+CONTEXT:
+- Files allowed: [globs], files to avoid: [globs]
+- Inputs from upstream: [artifact names / paths]
+- Architecture references: [docs sections]
+
+OBJECTIVE:
+- Implement [goal] strictly within SCOPE and produce artifacts in OUTPUTS
+
+CONSTRAINTS:
+- No edits outside SCOPE; minimal diffs; add tests with [Trait("Category", "Unit")]
+- Add OpenTelemetry spans and structured logs for new endpoints
+- Return: files changed, tests added, validation notes
+    `
+})
+```
+
+#### Aggregator / merge
+```typescript
+runSubagent({
+    description: "Aggregate subagent outputs and finalize",
+    prompt: `
+TASK:
+- Merge non-conflicting patches
+- If conflicts: apply deterministic rules (see Merge Strategy), then run tests
+
+VALIDATION:
+- dotnet test (unit first, then integration if required)
+- Coverage must not drop; new endpoints documented in docs/02-API-CONTRACTS.md
+
+RETURN:
+- Final changed files with summary
+- Test results and coverage delta
+- Follow-ups (max 3) if any items deferred
+    `
+})
+```
+
+### Decision Tree
+
+After completing the 5-step planning workflow:
+
+```
+User Request
+    ↓
+STEP 1: Task Analysis (understand, identify scope, estimate complexity)
+    ↓
+STEP 2: Calculate Delegation Score (use matrix)
+    ↓
+    ├─ Score ≤ 2 AND scope crystal clear?
+    │  └─→ Implement directly (single file, trivial)
+    │
+    ├─ Score 3-4 AND no research needed?
+    │  └─→ MAY implement directly (if very straightforward)
+    │
+    └─ Score ≥ 5 OR requires research?
+       ├─→ STEP 3: Document plan
+       ├─→ If 2+ independent subtasks exist → choose MultiAgent (parallel fan-out)
+       │     • Create DAG with 2–5 shards and explicit SCOPE per shard
+       │     • Set max concurrency and timeouts per shard
+       ├─→ STEP 4: Prepare structured runSubagent prompts (one per shard + aggregator)
+       └─→ STEP 5: Present analysis if score ≥ 10, then delegate
+```
+
+### Examples of Proper Delegation
+
+**User asks**: "Implement the Orchestration Service task execution engine"
+
+**You should**:
+```typescript
+runSubagent({
+  description: "Implement Orchestration task engine",
+  prompt: `Implement the Orchestration Service task execution engine:
+  
+  Context:
+  - Read docs/01-SERVICE-CATALOG.md section 3 for Orchestration specs
+  - Read docs/04-ML-AND-ORCHESTRATION-ADR.md for execution strategies
+  
+  Implementation steps:
+  1. Create IExecutionStrategy interface in Domain/Strategies/
+  2. Implement SingleShotStrategy (for Simple tasks)
+  3. Implement IterativeStrategy (for Medium tasks)
+  4. Implement MultiAgentStrategy (for Complex tasks)
+  5. Create StrategySelector to route based on complexity
+  6. Wire up in Program.cs with DI
+  7. Add unit tests for each strategy with [Trait("Category", "Unit")]
+  
+  Follow:
+  - Service architecture pattern from copilot-instructions.md
+  - Use OpenTelemetry spans for observability
+  - Add FluentValidation for all inputs
+  
+  Return: List of files created/modified, any design decisions made, test coverage report`
+})
+```
+
+**User asks**: "Fix the failing unit tests in Chat service"
+
+**You should**:
+```typescript
+runSubagent({
+  description: "Debug Chat service test failures",
+  prompt: `Investigate and fix failing unit tests in Chat service:
+  
+  1. Run: dotnet test --filter "Category=Unit" --verbosity quiet --nologo src/Services/Chat/
+  2. Analyze failures and identify root causes
+  3. Check for common issues: missing mocks, incorrect test data, timing issues
+  4. Fix the tests (preserve test intent, don't just make them pass)
+  5. Verify fixes with another test run
+  
+  Return: Summary of failures found, root causes, fixes applied, final test results`
+})
+```
+
+### Task Complexity Score (Use runSubagent if score ≥5)
+
+| Factor | Points | Examples |
+|--------|--------|----------|
+| Files to create/modify | 1 per file (max 5) | 3 files = 3 points |
+| Services involved | 2 per service | 2 services = 4 points |
+| Needs codebase search | 3 points | grep/semantic search needed |
+| Requires doc reading | 2 points | Must read docs/ files |
+| Test creation needed | 1 point | Unit or integration tests |
+| Cross-cutting concerns | 2 points | Auth, logging, events |
+| Estimated time | 1 per 15min (max 4) | 45min task = 3 points |
+
+Score ≥ 5: Use runSubagent
+
+### runSubagent Prompt Library
+
+#### Template: New Feature Implementation
+```typescript
+runSubagent({
+    description: "[Feature name in 3-5 words]",
+    prompt: `
+CONTEXT:
+- Architecture docs: [specific sections from docs/]
+- Related services: [list services this touches]
+- Current implementation status: [what exists, what doesn't]
+
+OBJECTIVE:
+[Clear, specific goal - what should exist after completion]
+
+REQUIREMENTS:
+1. [Functional requirement with acceptance criteria]
+2. [Technical requirement with specific patterns to follow]
+3. [Testing requirement with coverage expectations]
+
+IMPLEMENTATION STEPS:
+1. [Actionable step with file paths and expected output]
+2. [Step with validation/verification method]
+...
+
+CONSTRAINTS:
+- Follow: [copilot-instructions.md patterns]
+- Test traits: [Trait("Category", "Unit")] for unit tests
+- Observability: Add OpenTelemetry spans for [operations]
+- Validation: Use FluentValidation for [inputs]
+
+RETURN FORMAT:
+- Files created: [list with line counts]
+- Files modified: [list with change summary]
+- Tests added: [count and coverage %]
+- Design decisions: [ADR-worthy choices]
+- Issues encountered: [blockers/compromises]
+- Next steps: [if incomplete, what remains]
+    `
+})
+```
+
+#### Template: Bug Fix / Debugging
+```typescript
+runSubagent({
+    description: "Debug [specific failure]",
+    prompt: `
+PROBLEM:
+[Exact error message or unexpected behavior]
+
+REPRODUCTION:
+- Command: [exact command that fails]
+- Expected: [what should happen]
+- Actual: [what happens instead]
+- Frequency: [always/intermittent]
+
+INVESTIGATION STEPS:
+1. Gather context: [read relevant files, check logs]
+2. Identify root cause: [analyze error patterns]
+3. Propose fix: [minimal change to resolve issue]
+4. Verify: [test command to confirm fix]
+
+CONSTRAINTS:
+- Preserve existing behavior (no regressions)
+- Maintain test intent (don't just make tests pass)
+- Add tests if missing coverage revealed the bug
+
+RETURN FORMAT:
+- Root cause: [technical explanation]
+- Fix applied: [files changed with rationale]
+- Verification: [test output showing resolution]
+- Prevention: [what would catch this earlier]
+    `
+})
+```
+
+### When NOT to Use runSubagent
+
+Don't delegate if:
+- Simple Q&A (read docs/ and answer) → score 0
+- Running existing commands (use tasks/terminal) → score 0
+- Reading a single file (use read_file) → score 0
+- Formatting/style-only changes (use formatters or direct edit) → score 0-1
+- Single-line or single-file trivial edits → score 1-2
+- Explainer requests about existing architecture or ADRs → score 0
+
+Example:
+```typescript
+// ❌ Don't do this (score 0 - direct command execution)
+runSubagent({ description: "Check test status", prompt: "Run unit tests and tell me if they pass" })
+
+// ✅ Do this instead (direct)
+// Use the existing VS Code task: dotnet test unit only
+```
+
+### Measuring runSubagent Effectiveness
+
+Track after each delegation:
+
+| Metric | Target | How to Check |
+|--------|--------|--------------|
+| Task completion | 100% | Fully satisfied the request |
+| Files compile/tests pass | 95%+ | Build + test status |
+| Followed patterns | 100% | Matches examples in this file |
+| Test coverage | ≥85% | Test reports |
+| Docs updated when API changes | 100% | docs/ and OpenAPI updated |
+| Time saved vs manual | >50% | Compare to estimate |
+
+If delegation fails, refine prompt: add context, narrow scope, specify outputs, or split into smaller tasks.
+
+### Progressive Delegation Strategy
+
+1. Research & discovery (delegate)
+2. Planning and design (delegate if multi-file)
+3. Implementation (delegate for ≥3 files)
+4. Verification (mix: direct for running tests, delegate for multi-issue fixes)
+
+Example multi-phase:
+```typescript
+// Phase 1: Discovery
+runSubagent({ description: "Research presence tracking patterns", prompt: "Search for Redis-based presence tracking and summarize patterns to reuse" })
+
+// Phase 2: Implementation
+runSubagent({ description: "Implement presence tracking", prompt: "Implement IPresenceService and PresenceService based on discovered patterns, wire in ChatHub, add tests with [Trait(\"Category\", \"Unit\")]" })
+```
+
+### runSubagent Failure Recovery
+
+Common issues and fixes:
+
+| Failure | Symptom | Fix |
+|---------|---------|-----|
+| Prompt too vague | Agent asks questions | Add file paths, concrete outputs |
+| Scope too broad | Partial solution | Break into smaller tasks |
+| Missing context | Wrong patterns used | Include specific docs and examples |
+| No validation | Changes don't work | Add explicit verification steps |
+| Unintended edits | Modified unrelated files | Constrain allowed paths |
+
+Recovery template:
+```typescript
+runSubagent({
+    description: "Complete [failed task] – take 2",
+    prompt: `
+PREVIOUS ATTEMPT:
+[Summarize what happened]
+
+WHAT WENT WRONG:
+[Specific issues]
+
+CORRECTION:
+[Clarified requirements and added context]
+
+NEW APPROACH:
+[Adjusted steps or narrower scope]
+    `
+})
+```
+
+#### Parallel Recovery
+- If one shard fails: retry once with reduced scope; else convert to a serialized iterative subtask
+- If merge fails repeatedly: auto-create a "refactor-safe split" subtask to move overlapping code
+- If tests remain flaky: quarantine tests only with a linked issue and a 48h plan-of-action
+
+### Quick Reference: Delegate or Not?
+
+| User Says | Complexity | Action | Tool |
+|-----------|-----------|--------|------|
+| "Add presence tracking to Chat" | High | Delegate | runSubagent |
+| "Fix failing test in ChatHubTests" | Medium | Delegate | runSubagent |
+| "Create new Orchestration service" | High | Delegate | runSubagent |
+| "What's in ChatHub.cs?" | Low | Direct | read_file |
+| "Run unit tests" | Low | Direct | VS Code task: dotnet test unit only |
+| "Change timeout from 30s to 60s" | Low | Direct | edit/replace |
+| "Explain ML classification strategy" | Low | Direct | cite docs |
+| "Update README with new endpoint" | Low | Direct | single-file edit |
+| "Scaffold Browser service" | High | Delegate | runSubagent |
 
 ## Code Generation Rules
 
@@ -209,6 +893,13 @@ async def collect_training_sample(event: TaskCompletedEvent):
     await training_repo.save(TrainingSample.from_event(event))
 ```
 
+### Merge Strategy (Fan-in)
+- Prefer disjoint file sets per subagent; if unavoidable overlap:
+    - Deterministic merge order: domain → application → api → tests → docs
+    - In same-file conflicts: apply higher “contract” layer changes first; reconcile lower layers
+- Run unit tests after merging each shard; proceed only on PASS
+- If tests fail: create a scoped “fix-forward” subtask limited to the affected files
+
 ### 4. SAGA Pattern for Distributed Transactions
 For workflows spanning multiple services (GitHub + Browser + CI/CD):
 ```csharp
@@ -249,6 +940,11 @@ using var span = _tracer.StartActiveSpan("ClassifyTask");
 span.SetAttribute("task.type", taskType);
 ```
 
+### Observability – Subagents
+- Propagate X-Correlation-Id across planner and shards; link shard spans to the planner span
+- Per-shard spans: plan → implement → validate; tag shard-id, files.count, tests.count
+- Emit fan-out/fan-in metrics: shard_count, success_count, retries, conflicts_resolved
+
 ## Testing Requirements (85%+ Coverage)
 
 **CRITICAL: All test classes MUST have [Trait] attributes for proper test filtering and CI performance**
@@ -274,6 +970,11 @@ dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filt
 # Integration tests only (Testcontainers)
 dotnet test --settings .runsettings --no-build --verbosity quiet --nologo --filter "Category=Integration"
 ```
+
+### Parallel Run Quality Gates
+- Each shard must add ≥1 unit test for its change; aggregator runs fast unit suite first
+- Coverage per affected service must not decrease; target ≥85% overall
+- Gate PRs on: unit PASS + no new analyzer warnings + docs updated for any API change
 
 > **Crash Prevention**: Always run `dotnet test` with `--verbosity quiet --nologo`. Higher verbosity produces enough console output to freeze VS Code and Copilot. Use `--filter` to target a single test when you need more detail.
 
@@ -1300,10 +2001,13 @@ When making design choices, reference these ADRs:
 
 ## When You're Stuck
 
+**FIRST: Consider delegating to runSubagent.** Most tasks that feel "stuck" are complex enough to warrant delegation.
+
 1. **Re-read docs**: Check `docs/01-SERVICE-CATALOG.md` for the service you're building
 2. **Review examples**: Look at similar .NET microservices (eShopOnContainers, DAPR samples)
-3. **Ask specific questions**: "How do I implement retry policy with Polly for HTTP calls to ML service?"
-4. **Check roadmap**: Ensure you're on the right phase (`docs/02-IMPLEMENTATION-ROADMAP.md`)
+3. **Delegate to runSubagent**: Use detailed prompt with context, steps, and expected return
+4. **Ask specific questions**: "How do I implement retry policy with Polly for HTTP calls to ML service?"
+5. **Check roadmap**: Ensure you're on the right phase (`docs/02-IMPLEMENTATION-ROADMAP.md`)
 
 ---
 

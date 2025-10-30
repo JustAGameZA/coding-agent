@@ -1,17 +1,39 @@
-<mat-toolbar color="primary" class="app-toolbar">
-  <button mat-icon-button (click)="toggleSidenav()" class="menu-button">
+<mat-toolbar color="primary" class="app-toolbar" *ngIf="isAuthenticated()" [attr.data-testid]="'app-toolbar'">
+  <button mat-icon-button (click)="toggleSidenav()" class="menu-button" [attr.data-testid]="'menu-toggle'">
     <mat-icon>menu</mat-icon>
   </button>
   <span class="toolbar-title">{{ title() }}</span>
   <span class="toolbar-spacer"></span>
   <span class="toolbar-version">{{ version() }}</span>
+  
+  <!-- User Menu -->
+  <button 
+    mat-icon-button 
+    [matMenuTriggerFor]="userMenu" 
+    class="user-menu-button"
+    [attr.data-testid]="'user-menu-button'"
+    aria-label="User menu">
+    <mat-icon>account_circle</mat-icon>
+  </button>
+  <mat-menu #userMenu="matMenu" [attr.data-testid]="'user-menu'">
+    <div class="user-info" mat-menu-item disabled>
+      <mat-icon>person</mat-icon>
+      <span>{{ currentUser()?.username || 'User' }}</span>
+    </div>
+    <mat-divider></mat-divider>
+    <button mat-menu-item (click)="logout()" [attr.data-testid]="'logout-button'">
+      <mat-icon>logout</mat-icon>
+      <span>Logout</span>
+    </button>
+  </mat-menu>
 </mat-toolbar>
 
 <mat-sidenav-container class="app-sidenav-container">
   <mat-sidenav 
     #sidenav 
     mode="side" 
-    [opened]="sidenavOpened()"
+    [opened]="sidenavOpened() && isAuthenticated()"
+    [style.display]="isAuthenticated() ? 'block' : 'none'"
     class="app-sidenav">
     <mat-nav-list>
       <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
@@ -25,6 +47,10 @@
       <a mat-list-item routerLink="/tasks" routerLinkActive="active">
         <mat-icon matListItemIcon>task</mat-icon>
         <span matListItemTitle>Tasks</span>
+      </a>
+      <a mat-list-item routerLink="/admin/infrastructure" routerLinkActive="active" *ngIf="isAdmin()">
+        <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
+        <span matListItemTitle>Admin</span>
       </a>
     </mat-nav-list>
   </mat-sidenav>

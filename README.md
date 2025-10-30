@@ -27,30 +27,36 @@ A sophisticated coding assistant platform that combines real-time chat, task orc
 
 ## 🏗️ Architecture
 
-### Microservices (8 Services)
+### Microservices (10 Services)
 
 ```mermaid
 graph TB
     Client[Angular Dashboard] --> Gateway[API Gateway - YARP]
+    Gateway --> Auth[Auth Service]
     Gateway --> Chat[Chat Service]
     Gateway --> Orch[Orchestration Service]
     Gateway --> GitHub[GitHub Service]
     Gateway --> Browser[Browser Service]
     Gateway --> CICD[CI/CD Monitor]
     Gateway --> Dashboard[Dashboard BFF]
+    Gateway --> Ollama[Ollama Service]
 
     Orch --> ML[ML Classifier - Python]
+    Orch --> Ollama
 
-    Chat --> RabbitMQ[(RabbitMQ)]
+    Auth --> RabbitMQ[(RabbitMQ)]
+    Chat --> RabbitMQ
     Orch --> RabbitMQ
     GitHub --> RabbitMQ
 
-    Chat --> Postgres[(PostgreSQL)]
+    Auth --> Postgres[(PostgreSQL)]
+    Chat --> Postgres
     Orch --> Postgres
     GitHub --> Postgres
 
     Chat --> Redis[(Redis Cache)]
     Orch --> Redis
+    Dashboard --> Redis
 ```
 
 ### Technology Stack
@@ -89,8 +95,19 @@ Comprehensive documentation is available in the [`docs/`](./docs) directory:
 - **[📖 Runbooks](./docs/runbooks/)** - Operational procedures
 
 ### API Documentation
-- API specifications will be available in `docs/api/` (Phase 1)
-- OpenAPI/Swagger endpoints for each service
+- **[🔐 Auth Service API](./docs/api/auth-service-openapi.yaml)** - Authentication endpoints (OpenAPI 3.0)
+- **[💬 Chat Service API](./docs/api/chat-service-openapi.yaml)** - Chat and messaging endpoints
+- **[🌐 Gateway API](./docs/api/gateway-openapi.yaml)** - Gateway routing configuration
+- OpenAPI/Swagger endpoints available on each service
+
+### Authentication & Security
+- **[🔑 Auth Implementation Guide](./docs/AUTH-IMPLEMENTATION.md)** - Complete authentication documentation
+  - Architecture and security design
+  - API endpoints with curl examples
+  - JWT token structure and claims
+  - OWASP Top 10 alignment
+  - Deployment and troubleshooting
+- **[🛡️ E2E Auth Tests](./docs/AUTH-E2E-TEST-SUMMARY.md)** - Frontend authentication test coverage
 
 ### Contributing
 - **[Contributing Guide](./.github/CONTRIBUTING.md)** - How to contribute
@@ -150,7 +167,113 @@ docker compose ps
 - ⚡ [Quick Start Commands](./deployment/docker-compose/DOCKER-QUICK-START.md)
 - 🛠️ [Implementation Details](./deployment/docker-compose/DOCKER-IMPLEMENTATION-SUMMARY.md)
 
-### Development Roadmap
+### Authentication Setup
+
+The platform uses JWT-based authentication with BCrypt password hashing.
+
+**Test User Registration**:
+```bash
+# Register a new user
+curl -X POST http://localhost:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "Test@1234",
+    "confirmPassword": "Test@1234"
+  }'
+
+# Response includes JWT tokens
+{
+  "accessToken": "eyJhbGci...",
+  "refreshToken": "jZXN0IHR...",
+  "expiresIn": 900,
+  "tokenType": "Bearer"
+}
+```
+
+**Login**:
+```bash
+# Login with username and password
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "password": "Test@1234"
+  }'
+```
+
+**Using JWT Tokens**:
+```bash
+# Use access token in Authorization header
+curl -X GET http://localhost:5000/api/auth/me \
+  -H "Authorization: Bearer eyJhbGci..."
+```
+
+**Configuration**:
+```bash
+# Required environment variables for Auth Service
+export Jwt__Secret=$(openssl rand -base64 64)
+export ConnectionStrings__AuthDb="Host=localhost;Database=coding_agent;..."
+export RabbitMQ__Host=localhost
+```
+
+**Security Features**:
+- ✅ BCrypt password hashing (work factor 12)
+- ✅ JWT access tokens (15-minute expiry)
+- ✅ Refresh tokens (7-day expiry with rotation)
+- ✅ Session management with IP tracking
+- ✅ Strong password policy enforcement
+- ✅ Rate limiting (Gateway: 10 login attempts/min per IP)
+
+**Documentation**: See [Auth Implementation Guide](./docs/AUTH-IMPLEMENTATION.md) for complete details.
+
+### Admin Features
+
+The platform includes role-based admin features for user management.
+
+**Default Admin User** (Development only):
+```bash
+# Seed admin user
+.\seed-admin-user.ps1 -Email "admin@example.com" -Password "Admin@1234"
+
+# Login as admin
+Username: admin
+Password: Admin@1234
+```
+
+⚠️ **Security Warning**: Change the default admin password immediately in production!
+
+**Admin Capabilities**:
+- ✅ View all users (paginated list with search/filter)
+- ✅ Manage user roles (add/remove Admin role)
+- ✅ Activate/deactivate user accounts
+- ✅ View user details and session count
+- ✅ Monitor infrastructure health
+
+**Admin Pages**:
+- **User Management**: `http://localhost:4200/admin/users`
+- **Infrastructure**: `http://localhost:4200/admin/infrastructure`
+
+**API Endpoints** (require `Admin` role in JWT):
+```bash
+# Get all users
+GET /api/auth/admin/users?page=1&pageSize=20
+
+# Update user roles
+PUT /api/auth/admin/users/{id}/roles
+{"roles": ["Admin", "User"]}
+
+# Deactivate user
+PUT /api/auth/admin/users/{id}/deactivate
+```
+
+**Documentation**:
+- 🔐 [Admin Implementation Summary](./ADMIN-FEATURES-IMPLEMENTATION-SUMMARY.md)
+- 🧪 [E2E Admin Tests](./E2E-ADMIN-TESTS-SUMMARY.md)
+- 📋 [QA Deliverables](./QA-DELIVERABLES-ADMIN-E2E.md)
+
+--- Development Roadmap
 
 **Current Status**: ✅ Phase 3 Complete (Integration Services)
 **Current Phase**: Phase 4 - Frontend & Dashboard (Starting)

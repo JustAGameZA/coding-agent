@@ -399,10 +399,11 @@ services:
     #           count: all
     #           capabilities: [gpu]
     healthcheck:
-      test: ["CMD-SHELL", "if command -v wget >/dev/null 2>&1; then wget --no-verbose --tries=1 --spider http://localhost:11434/api/tags; elif command -v curl >/dev/null 2>&1; then curl -fsS http://localhost:11434/api/tags >/dev/null; else echo 'no http client' >&2 && exit 1; fi"]
+      # Use ollama CLI which is available in the container
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 3
       start_period: 60s
     logging:
       driver: "json-file"

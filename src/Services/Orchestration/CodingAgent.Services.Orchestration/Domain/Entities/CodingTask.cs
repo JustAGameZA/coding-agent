@@ -16,6 +16,8 @@ public class CodingTask : BaseEntity
     public TaskStatus Status { get; private set; }
     public DateTime? StartedAt { get; private set; }
     public DateTime? CompletedAt { get; private set; }
+    public int? PrNumber { get; private set; }
+    public string? PrUrl { get; private set; }
 
     private readonly List<TaskExecution> _executions = new();
     public IReadOnlyCollection<TaskExecution> Executions => _executions.AsReadOnly();
@@ -165,6 +167,23 @@ public class CodingTask : BaseEntity
         }
 
         _executions.Add(execution);
+        MarkAsUpdated();
+    }
+
+    public void SetPullRequest(int prNumber, string prUrl)
+    {
+        if (prNumber <= 0)
+        {
+            throw new ArgumentException("PR number must be positive", nameof(prNumber));
+        }
+
+        if (string.IsNullOrWhiteSpace(prUrl))
+        {
+            throw new ArgumentException("PR URL cannot be empty", nameof(prUrl));
+        }
+
+        PrNumber = prNumber;
+        PrUrl = prUrl;
         MarkAsUpdated();
     }
 }

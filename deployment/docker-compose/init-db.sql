@@ -239,8 +239,8 @@ CREATE INDEX IF NOT EXISTS idx_deployments_environment ON cicd.deployments(envir
 
 -- ==========================================
 -- Schema: auth
--- Service: Authentication (future)
--- Purpose: Users, roles, permissions
+-- Service: Auth Service
+-- Purpose: Users, sessions, API keys, roles, permissions
 -- ==========================================
 CREATE SCHEMA IF NOT EXISTS auth;
 
@@ -275,6 +275,32 @@ CREATE TABLE IF NOT EXISTS auth.user_roles (
     PRIMARY KEY (user_id, role_id)
 );
 
+-- Sessions table (for refresh tokens)
+CREATE TABLE IF NOT EXISTS auth.sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    refresh_token_hash VARCHAR(500) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent VARCHAR(500),
+    is_revoked BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
+-- API keys table (for programmatic access)
+CREATE TABLE IF NOT EXISTS auth.api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    key_hash VARCHAR(500) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMP WITH TIME ZONE
+);
+
 -- Permissions table
 CREATE TABLE IF NOT EXISTS auth.permissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -301,6 +327,11 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON auth.user_roles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON auth.user_roles(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role_id ON auth.role_permissions(role_id);
 CREATE INDEX IF NOT EXISTS idx_role_permissions_permission_id ON auth.role_permissions(permission_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON auth.sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON auth.sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_is_revoked ON auth.sessions(is_revoked);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON auth.api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_is_active ON auth.api_keys(is_active);
 
 -- ==========================================
 -- Insert default roles

@@ -149,29 +149,29 @@ scrape_configs:
       - targets: ["dashboard-bff:5007"]
         labels:
           service: "dashboard"
-      # ==========================================
-      # Ollama Service
-      # ==========================================
-      - job_name: "ollama-service"
-        static_configs:
-          - targets: ["ollama-service:5003"]
-            labels:
-              service: "ollama"
-        metrics_path: "/metrics"
-        scheme: "http"
-
-      # ==========================================
-      # Ollama Backend (LLM Inference)
-      # ==========================================
-      - job_name: "ollama-backend"
-        static_configs:
-          - targets: ["ollama:11434"]
-            labels:
-              service: "ollama-backend"
-        metrics_path: "/api/metrics"
-        scheme: "http"
-
     metrics_path: "/metrics"
+    scheme: "http"
+
+  # ==========================================
+  # Ollama Service
+  # ==========================================
+  - job_name: "ollama-service"
+    static_configs:
+      - targets: ["ollama-service:5003"]
+        labels:
+          service: "ollama"
+    metrics_path: "/metrics"
+    scheme: "http"
+
+  # ==========================================
+  # Ollama Backend (LLM Inference)
+  # ==========================================
+  - job_name: "ollama-backend"
+    static_configs:
+      - targets: ["ollama:11434"]
+        labels:
+          service: "ollama-backend"
+    metrics_path: "/api/metrics"
     scheme: "http"
 
   # ==========================================

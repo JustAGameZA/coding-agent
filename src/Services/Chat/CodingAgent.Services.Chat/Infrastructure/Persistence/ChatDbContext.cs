@@ -30,12 +30,13 @@ public class ChatDbContext : DbContext
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.Id)
+                .HasColumnName("id")
                 .ValueGeneratedNever(); // We generate GUIDs in the entity
 
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.UserId).IsRequired();
-            entity.Property(e => e.CreatedAt).IsRequired();
-            entity.Property(e => e.UpdatedAt).IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title").IsRequired().HasMaxLength(500);
+            entity.Property(e => e.UserId).HasColumnName("user_id").IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
             // One-to-many relationship with Messages
             entity.HasMany(e => e.Messages)
@@ -55,12 +56,13 @@ public class ChatDbContext : DbContext
             entity.HasKey(e => e.Id);
 
             entity.Property(e => e.Id)
+                .HasColumnName("id")
                 .ValueGeneratedNever(); // We generate GUIDs in the entity
 
-            entity.Property(e => e.ConversationId).IsRequired();
-            entity.Property(e => e.Content).IsRequired().HasMaxLength(50000); // Allow long messages
-            entity.Property(e => e.Role).IsRequired().HasConversion<string>(); // Store enum as string
-            entity.Property(e => e.SentAt).IsRequired();
+            entity.Property(e => e.ConversationId).HasColumnName("conversation_id").IsRequired();
+            entity.Property(e => e.Content).HasColumnName("content").IsRequired().HasMaxLength(50000); // Allow long messages
+            entity.Property(e => e.Role).HasColumnName("role").IsRequired().HasConversion<string>(); // Store enum as string
+            entity.Property(e => e.SentAt).HasColumnName("sent_at").IsRequired();
 
             // Indexes for common queries
             entity.HasIndex(e => e.ConversationId);

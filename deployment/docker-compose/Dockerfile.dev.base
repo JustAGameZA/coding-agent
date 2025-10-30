@@ -1,0 +1,27 @@
+# Base development image with SharedKernel pre-built
+# This eliminates race conditions when multiple services restore simultaneously
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dev-base
+
+WORKDIR /workspace
+
+# Copy solution-level files
+COPY global.json ./
+COPY Directory.Build.props ./
+COPY CodingAgent.sln ./
+
+# Copy and restore SharedKernel ONCE
+COPY src/SharedKernel/CodingAgent.SharedKernel/CodingAgent.SharedKernel.csproj src/SharedKernel/CodingAgent.SharedKernel/
+COPY src/SharedKernel/CodingAgent.SharedKernel/ src/SharedKernel/CodingAgent.SharedKernel/
+
+RUN dotnet restore src/SharedKernel/CodingAgent.SharedKernel/CodingAgent.SharedKernel.csproj --force && \
+    dotnet build src/SharedKernel/CodingAgent.SharedKernel/CodingAgent.SharedKernel.csproj -c Debug --no-restore
+
+# Pre-cache common NuGet packages to speed up subsequent restores
+RUN dotnet restore CodingAgent.sln --force || true
+
+# Set environment for hot reload
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+
+# This image will be the base for all .NET services in dev mode

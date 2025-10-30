@@ -23,14 +23,29 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     logger.info("Starting ML Classifier Service...")
-    logger.info("Heuristic classifier initialized")
-    # Future: Load ML models, connect to database, start event consumers
+    
+    # Initialize database connection
+    from infrastructure.database import init_db, close_db
+    await init_db()
+    
+    # Start event consumer for TaskCompletedEvent
+    from infrastructure.messaging import start_consumer, stop_consumer
+    await start_consumer()
+    
+    logger.info("ML Classifier Service started successfully")
 
     yield
 
     # Shutdown
     logger.info("Shutting down ML Classifier Service...")
-    # Future: Close database connections, stop event consumers
+    
+    # Stop event consumer
+    await stop_consumer()
+    
+    # Close database connection
+    await close_db()
+    
+    logger.info("ML Classifier Service shutdown complete")
 
 
 # Create FastAPI app

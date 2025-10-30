@@ -6,16 +6,18 @@
 #   docker compose -f deployment/docker-compose/docker-compose.yml -f deployment/docker-compose/docker-compose.apps.dev.yml up --build
 #
 # This runs app services with hot reload:
-# - .NET services via `dotnet watch`
+# - .NET services via `dotnet watch` using shared base image (SharedKernel pre-built)
 # - Python FastAPI via `uvicorn --reload`
 # - Angular UI via `ng serve`
-# Caches: nuget, pip, npm persisted via named volumes
+# Caches: pip, npm persisted via named volumes
+# Note: NuGet packages cached in base image to prevent race conditions
 # ============================================
 
 volumes:
-  nuget-packages:
   pip-cache:
   npm-cache:
+  dashboard-node-modules:
+  playwright-cache:
 
 networks:
   coding-agent:
@@ -25,29 +27,56 @@ networks:
 
 services:
   # ==========================================
+  # Base Image Builder (SharedKernel pre-built)
+  # Builds once, then all other services depend on it
+  # ==========================================
+  dev-base:
+    build:
+      context: ../../
+      dockerfile: deployment/docker-compose/Dockerfile.dev.base
+    image: coding-agent-dev-base:latest
+    container_name: coding-agent-dev-base-builder
+    # This service just builds the base image and exits
+    command: echo "Base image built successfully"
+    networks:
+      - coding-agent
+
+  # ==========================================
   # Gateway (YARP)
   # ==========================================
   gateway:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-gateway-dev
     working_dir: /workspace/src/Gateway/CodingAgent.Gateway
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5000"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5000"
     ports:
       - "5000:5000"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5000"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Authentication__Jwt__Issuer: "http://localhost:5000"
+      Authentication__Jwt__Audience: "coding-agent-api"
+      Authentication__Jwt__SecretKey: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      chat-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -55,30 +84,37 @@ services:
   # Chat Service
   # ==========================================
   chat-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-chat-dev
     working_dir: /workspace/src/Services/Chat/CodingAgent.Services.Chat
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5001"
+      bash -lc "rm -rf obj bin && dotnet restore --no-cache && dotnet watch run --no-restore --urls http://0.0.0.0:5001"
     ports:
       - "5001:5001"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5001"
-      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_USE_POLLING_FILE_WATCHER: "false"
       ConnectionStrings__ChatDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
       Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
       OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Jwt__Secret: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
+      Jwt__Issuer: "http://localhost:5000"
+      Jwt__Audience: "coding-agent-api"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -86,17 +122,18 @@ services:
   # Orchestration Service
   # ==========================================
   orchestration-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-orchestration-dev
     working_dir: /workspace/src/Services/Orchestration/CodingAgent.Services.Orchestration
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5002"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5002"
     ports:
       - "5002:5002"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5002"
-      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_USE_POLLING_FILE_WATCHER: "false"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
@@ -104,10 +141,13 @@ services:
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - rabbitmq
-      - ml-classifier
+      dev-base:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      ml-classifier:
+        condition: service_started
     networks:
       - coding-agent
 
@@ -115,26 +155,29 @@ services:
   # GitHub Service
   # ==========================================
   github-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-github-dev
     working_dir: /workspace/src/Services/GitHub/CodingAgent.Services.GitHub
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5004"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5004"
     ports:
       - "5004:5004"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5004"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -142,26 +185,29 @@ services:
   # Browser Service
   # ==========================================
   browser-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-browser-dev
     working_dir: /workspace/src/Services/Browser/CodingAgent.Services.Browser
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5005"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5005"
     ports:
       - "5005:5005"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5005"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -169,26 +215,34 @@ services:
   # CI/CD Monitor Service
   # ==========================================
   cicd-monitor-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-cicd-monitor-dev
     working_dir: /workspace/src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
+      bash -lc "rm -rf obj bin /workspace/src/SharedKernel/CodingAgent.SharedKernel/obj/project.assets.json.lock && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5006"
     ports:
       - "5006:5006"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5006"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
+      RunMigrationsOnStartup: "true"
+      ConnectionStrings__CICDMonitorDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-codingagent};Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      GitHub__Token: "${GITHUB_TOKEN:-}"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -196,21 +250,74 @@ services:
   # Dashboard BFF (Server)
   # ==========================================
   dashboard-bff:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-dashboard-bff-dev
     working_dir: /workspace/src/Services/Dashboard/CodingAgent.Services.Dashboard
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5007"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5007"
     ports:
       - "5007:5007"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5007"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
+      Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Services__Chat__BaseUrl: "http://chat-service:5001"
+      Services__Orchestration__BaseUrl: "http://orchestration-service:5002"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
+    depends_on:
+      dev-base:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      chat-service:
+        condition: service_started
+      orchestration-service:
+        condition: service_started
+    networks:
+      - coding-agent
+
+  # ==========================================
+  # Auth Service
+  # ==========================================
+  auth-service:
+    image: coding-agent-dev-base:latest
+    container_name: coding-agent-auth-dev
+    working_dir: /workspace/src/Services/Auth/CodingAgent.Services.Auth
+    command: >-
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5008"
+    ports:
+      - "5008:5008"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://0.0.0.0:5008"
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
+      ConnectionStrings__AuthDb: "Host=postgres;Database=codingagent;Username=${POSTGRES_USER:-codingagent};Password=${POSTGRES_PASSWORD:-devPassword123!}"
+      Redis__Connection: "redis:6379,password=${REDIS_PASSWORD:-devPassword123!}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
+      OpenTelemetry__Endpoint: "http://jaeger:4317"
+      Authentication__Jwt__Issuer: "http://localhost:5000"
+      Authentication__Jwt__Audience: "coding-agent-api"
+      Authentication__Jwt__SecretKey: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
+      Authentication__Jwt__AccessTokenExpiryMinutes: "15"
+      Authentication__Jwt__RefreshTokenExpiryDays: "7"
+    volumes:
+      - ../../:/workspace
+    depends_on:
+      dev-base:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -218,17 +325,18 @@ services:
   # Ollama Service
   # ==========================================
   ollama-service:
-    image: mcr.microsoft.com/dotnet/sdk:9.0
+    image: coding-agent-dev-base:latest
     container_name: coding-agent-ollama-dev
     working_dir: /workspace/src/Services/Ollama/CodingAgent.Services.Ollama
     command: >-
-      bash -lc "dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5003"
+      bash -lc "rm -rf obj bin && dotnet restore && dotnet watch run --no-restore --urls http://0.0.0.0:5003"
     ports:
       - "5003:5003"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://0.0.0.0:5003"
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
       Services__Ollama__BaseUrl: "http://ollama:11434"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
@@ -236,10 +344,13 @@ services:
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace
-      - nuget-packages:/root/.nuget/packages
     depends_on:
-      - ollama
-      - rabbitmq
+      dev-base:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - coding-agent
 
@@ -251,9 +362,8 @@ services:
     container_name: coding-agent-ml-classifier-dev
     working_dir: /app
     command: >-
-      bash -lc "pip install --upgrade pip && \
-      (test -f requirements.txt && pip install -r requirements.txt || true) && \
-      pip install uvicorn[standard] && \
+      bash -c "pip install --upgrade pip && \
+      pip install -r requirements.txt && \
       uvicorn main:app --reload --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
@@ -274,16 +384,25 @@ services:
     container_name: coding-agent-dashboard-ui-dev
     working_dir: /workspace
     command: >-
-      bash -lc "npm ci && npx ng serve --host 0.0.0.0 --port 4200 --poll 500"
+      bash -lc "npm ci && npx playwright install --with-deps chromium && npx ng serve --host 0.0.0.0 --port 4200 --poll 2000"
     ports:
       - "4200:4200"
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
+      PLAYWRIGHT_BROWSERS_PATH: /root/.cache/ms-playwright
     volumes:
       - ../../src/Frontend/coding-agent-dashboard:/workspace
+      - dashboard-node-modules:/workspace/node_modules
       - npm-cache:/root/.npm
+      - playwright-cache:/root/.cache/ms-playwright
     networks:
       - coding-agent
+    # Reduce CPU usage - Angular barely implemented, hot reload less critical
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
 
   # (No infra services here; run together with infra compose via -f)

@@ -17,6 +17,9 @@ public class BrowserPoolTests : IAsyncDisposable
 
     public BrowserPoolTests()
     {
+        // Skip gracefully if Playwright browsers are not installed
+        TestGuards.PlaywrightGuard.EnsureBrowsersInstalledOrSkip();
+
         _mockLogger = new Mock<ILogger<BrowserPool>>();
         _options = new BrowserOptions
         {

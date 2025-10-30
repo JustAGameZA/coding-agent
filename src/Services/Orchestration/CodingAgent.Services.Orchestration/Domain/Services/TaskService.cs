@@ -4,6 +4,7 @@ using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.SharedKernel.Abstractions;
 using CodingAgent.SharedKernel.Domain.Events;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SharedKernelTaskType = CodingAgent.SharedKernel.Domain.ValueObjects.TaskType;
 using SharedKernelTaskComplexity = CodingAgent.SharedKernel.Domain.ValueObjects.TaskComplexity;
 using SharedKernelExecutionStrategy = CodingAgent.SharedKernel.Domain.ValueObjects.ExecutionStrategy;
@@ -18,17 +19,23 @@ public class TaskService : ITaskService
 {
     private readonly ITaskRepository _taskRepository;
     private readonly IEventPublisher _eventPublisher;
+    private readonly IGitHubClient _githubClient;
     private readonly ILogger<TaskService> _logger;
+    private readonly GitHubRepositoryOptions _repoOptions;
     private const string EntityName = nameof(CodingTask);
 
     public TaskService(
         ITaskRepository taskRepository,
         IEventPublisher eventPublisher,
-        ILogger<TaskService> logger)
+        IGitHubClient githubClient,
+        ILogger<TaskService> logger,
+        IOptions<GitHubRepositoryOptions> repoOptions)
     {
         _taskRepository = taskRepository ?? throw new ArgumentNullException(nameof(taskRepository));
         _eventPublisher = eventPublisher ?? throw new ArgumentNullException(nameof(eventPublisher));
+        _githubClient = githubClient ?? throw new ArgumentNullException(nameof(githubClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _repoOptions = repoOptions?.Value ?? new GitHubRepositoryOptions();
     }
 
     public async Task<CodingTask> CreateTaskAsync(
@@ -176,6 +183,114 @@ public class TaskService : ITaskService
         }, cancellationToken);
 
         _logger.LogInformation("Task {TaskId} completed and event published", taskId);
+
+        // Create PR on GitHub if task was successful and has code changes
+        // Only create PR on first completion (when PR not already created)
+        if (task.PrNumber == null && task.Status == TaskStatus.Completed)
+        {
+            await TryCreatePullRequestAsync(task, cancellationToken);
+        }
+    }
+
+    private async Task TryCreatePullRequestAsync(CodingTask task, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Check if GitHub service is available
+            var isAvailable = await _githubClient.IsAvailableAsync(cancellationToken);
+            if (!isAvailable)
+            {
+                _logger.LogWarning(
+                    "GitHub service unavailable, skipping PR creation for task {TaskId}",
+                    task.Id);
+                return;
+            }
+
+            // Read repository configuration from options (configured via appsettings)
+            var owner = string.IsNullOrWhiteSpace(_repoOptions.Owner) ? "" : _repoOptions.Owner;
+            var repo = string.IsNullOrWhiteSpace(_repoOptions.Name) ? "" : _repoOptions.Name;
+            var baseBranch = string.IsNullOrWhiteSpace(_repoOptions.BaseBranch) ? "main" : _repoOptions.BaseBranch;
+            var prefix = string.IsNullOrWhiteSpace(_repoOptions.HeadPrefix) ? "task/" : _repoOptions.HeadPrefix!;
+            var headBranch = $"{prefix}{task.Id}"; // Convention: <prefix>{taskId}
+
+            if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
+            {
+                _logger.LogWarning("GitHub repository configuration is missing. Skipping PR creation for task {TaskId}", task.Id);
+                return;
+            }
+
+            var prTitle = $"Task #{task.Id}: {task.Title}";
+            var prBody = BuildPullRequestDescription(task);
+
+            _logger.LogInformation(
+                "Creating GitHub PR for task {TaskId}: {Owner}/{Repo} ({Head} -> {Base})",
+                task.Id, owner, repo, headBranch, baseBranch);
+
+            var pr = await _githubClient.CreatePullRequestAsync(
+                owner,
+                repo,
+                prTitle,
+                prBody,
+                headBranch,
+                baseBranch,
+                isDraft: false,
+                cancellationToken);
+
+            // Store PR info on task
+            task.SetPullRequest(pr.Number, pr.HtmlUrl);
+            await _taskRepository.UpdateAsync(task, cancellationToken);
+
+            // Publish PullRequestCreatedEvent
+            await _eventPublisher.PublishAsync(new PullRequestCreatedEvent
+            {
+                PullRequestId = Guid.NewGuid(), // GitHub service will have its own ID
+                Number = pr.Number,
+                RepositoryOwner = owner,
+                RepositoryName = repo,
+                Title = prTitle,
+                Url = pr.Url,
+                Head = headBranch,
+                Base = baseBranch,
+                // TODO: Replace with authenticated user from JWT claims once auth is integrated
+                Author = _repoOptions.DefaultAuthor ?? "system"
+            }, cancellationToken);
+
+            _logger.LogInformation(
+                "GitHub PR created for task {TaskId}: {Owner}/{Repo}#{Number} - {Url}",
+                task.Id, owner, repo, pr.Number, pr.HtmlUrl);
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't fail the task - PR creation is optional
+            _logger.LogError(
+                ex,
+                "Failed to create GitHub PR for task {TaskId}. Task completion succeeded but PR creation failed.",
+                task.Id);
+        }
+    }
+
+    private static string BuildPullRequestDescription(CodingTask task)
+    {
+        var description = $@"## Task Description
+
+{task.Description}
+
+## Task Details
+
+- **Task ID**: {task.Id}
+- **Type**: {task.Type}
+- **Complexity**: {task.Complexity}
+- **Created**: {task.CreatedAt:yyyy-MM-dd HH:mm:ss} UTC
+- **Completed**: {task.CompletedAt:yyyy-MM-dd HH:mm:ss} UTC
+
+## Execution Summary
+
+This pull request contains code changes generated by the Coding Agent for the task described above.
+
+---
+*Generated by Coding Agent v2.0*";
+
+        return description;
     }
 
     public async Task FailTaskAsync(

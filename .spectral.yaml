@@ -1,0 +1,30 @@
+extends: spectral:oas
+
+rules:
+  # Prefer descriptions/summaries but don't fail builds on missing ones yet
+  operation-description:
+    severity: warn
+  operation-summary:
+    severity: warn
+
+  # Ensure we keep operationIds unique across specs
+  operation-operationId-unique:
+    severity: error
+
+  # We include contact/license in specs; keep as warnings if missing
+  info-contact:
+    severity: warn
+  info-license:
+    severity: warn
+
+  # Tag descriptions are optional in this repo
+  tag-description:
+    severity: off
+
+  # Allow small specs without component reuse noise
+  oas3-unused-components-schema:
+    severity: off
+
+  # Accept vendor extensions anywhere
+  no-unresolved-refs:
+    severity: error

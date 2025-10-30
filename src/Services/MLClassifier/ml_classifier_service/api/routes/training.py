@@ -148,24 +148,108 @@ async def retrain_model(request: TrainingRequest) -> TrainingResponse:
                 samples_used=len(training_samples),
             )
 
-        # TODO: Phase 2 - Implement actual retraining logic
+        # Implement actual retraining logic
+        logger.info(f"Starting model retraining with {len(training_samples)} samples")
+        
         # 1. Prepare training dataset
-        # 2. Split into train/validation sets
-        # 3. Train XGBoost model
-        # 4. Evaluate on validation set
-        # 5. Save model with versioning
-        # 6. Update model loader to use new model
-
-        logger.info(
-            f"Model retraining placeholder: would train on {len(training_samples)} samples"
+        descriptions = [sample['task_description'] for sample in training_samples]
+        task_types = [sample['task_type'] for sample in training_samples]
+        complexities = [sample['complexity'] for sample in training_samples]
+        
+        # 2. Import required libraries
+        import numpy as np
+        import xgboost as xgb
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.model_selection import train_test_split
+        from sklearn.preprocessing import LabelEncoder
+        from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+        import joblib
+        import os
+        from datetime import datetime
+        
+        # 3. Encode labels
+        type_encoder = LabelEncoder()
+        complexity_encoder = LabelEncoder()
+        
+        encoded_types = type_encoder.fit_transform(task_types)
+        encoded_complexities = complexity_encoder.fit_transform(complexities)
+        
+        # 4. Feature extraction
+        vectorizer = TfidfVectorizer(
+            max_features=1000,
+            stop_words='english',
+            ngram_range=(1, 2),
+            min_df=2
         )
-
+        X = vectorizer.fit_transform(descriptions).toarray()
+        
+        # 5. Split data for type classification
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, encoded_types, test_size=0.2, random_state=42, stratify=encoded_types
+        )
+        
+        # 6. Train XGBoost model for task type
+        model = xgb.XGBClassifier(
+            n_estimators=100,
+            max_depth=6,
+            learning_rate=0.1,
+            objective='multi:softprob',
+            num_class=len(type_encoder.classes_),
+            random_state=42,
+            eval_metric='mlogloss'
+        )
+        
+        model.fit(X_train, y_train)
+        
+        # 7. Evaluate model
+        y_pred = model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision, recall, f1, _ = precision_recall_fscore_support(y_test, y_pred, average='macro')
+        
+        logger.info(f"Model evaluation - Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
+        
+        # 8. Save model with versioning
+        version = request.model_version or f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        model_dir = "models/trained"
+        os.makedirs(model_dir, exist_ok=True)
+        
+        model_path = f"{model_dir}/xgboost_model_{version}.json"
+        vectorizer_path = f"{model_dir}/vectorizer_{version}.pkl"
+        encoders_path = f"{model_dir}/encoders_{version}.pkl"
+        
+        # Save model in XGBoost format
+        model.save_model(model_path)
+        
+        # Save vectorizer and encoders
+        joblib.dump(vectorizer, vectorizer_path)
+        joblib.dump({
+            'type_encoder': type_encoder,
+            'complexity_encoder': complexity_encoder
+        }, encoders_path)
+        
+        # 9. Save model metadata to database
+        model_metadata = {
+            'version': version,
+            'model_path': model_path,
+            'vectorizer_path': vectorizer_path,
+            'accuracy': float(accuracy),
+            'precision_macro': float(precision),
+            'recall_macro': float(recall),
+            'f1_macro': float(f1),
+            'training_samples': len(training_samples),
+            'is_active': True  # Mark as active model
+        }
+        
+        await repo.save_model_version(model_metadata)
+        
+        logger.info(f"Model retraining completed successfully - version: {version}")
+        
         return TrainingResponse(
-            status="pending",
-            message="Model retraining will be implemented in Phase 2",
+            status="completed",
+            message=f"Model retrained successfully with {len(training_samples)} samples",
             samples_used=len(training_samples),
-            new_model_version=request.model_version or "v1.0.0-pending",
-            accuracy=None,
+            new_model_version=version,
+            accuracy=accuracy,
         )
 
     except Exception as e:

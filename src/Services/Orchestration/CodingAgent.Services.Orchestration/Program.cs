@@ -19,6 +19,7 @@ using OpenTelemetry.Trace;
 using System.Threading.RateLimiting;
 using Polly;
 using Polly.Extensions.Http;
+using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -139,8 +140,23 @@ builder.Services.AddHttpClient<IMLClassifierClient, MLClassifierClient>(client =
 .AddPolicyHandler(GetRetryPolicy())
 .AddPolicyHandler(GetCircuitBreakerPolicy());
 
+// Register GitHub service HTTP client with retry policy
+builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
+{
+    var githubServiceUrl = builder.Configuration["GitHub:ServiceUrl"] ?? "http://localhost:5004";
+    client.BaseAddress = new Uri(githubServiceUrl);
+    var timeoutMs = builder.Configuration.GetValue<int?>("GitHub:TimeoutMs")
+        ?? (builder.Environment.IsProduction() ? 5000 : 10000);
+    client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
 // Register Strategy Selector
 builder.Services.AddScoped<IStrategySelector, StrategySelector>();
+
+// Bind GitHub repository configuration (used by TaskService for PR creation)
+builder.Services.Configure<GitHubRepositoryOptions>(builder.Configuration.GetSection("GitHub:Repository"));
 
 // Health checks
 var healthChecksBuilder = builder.Services.AddHealthChecks()
