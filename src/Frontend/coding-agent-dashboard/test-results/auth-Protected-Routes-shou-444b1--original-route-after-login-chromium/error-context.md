@@ -1,0 +1,48 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e6]:
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - img [ref=e10]: lock
+      - text: Sign In
+    - generic [ref=e11]: Welcome to Coding Agent Dashboard
+  - generic [ref=e13]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: Username or Email
+        - generic [ref=e18]: "*"
+      - img [ref=e20]: person
+      - textbox "Username or Email" [ref=e22]:
+        - /placeholder: Enter your username or email
+        - text: e2euser_1761637715855
+    - generic [ref=e24]:
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - text: Password
+          - generic [ref=e28]: "*"
+        - img [ref=e30]: lock
+        - textbox "Password" [ref=e32]:
+          - /placeholder: Enter your password
+        - button "Toggle password visibility" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]: visibility
+      - generic [ref=e40]: Password is required
+    - generic [ref=e43]:
+      - generic [ref=e44] [cursor=pointer]:
+        - checkbox "Remember me" [ref=e46]
+        - generic:
+          - img
+      - generic [ref=e47] [cursor=pointer]: Remember me
+    - generic [ref=e48]:
+      - img [ref=e49]: error
+      - generic [ref=e50]: Invalid username or password
+    - button "Sign In" [disabled]:
+      - generic: Sign In
+  - generic [ref=e51]:
+    - link "Forgot password?" [ref=e52] [cursor=pointer]:
+      - /url: javascript:void(0)
+    - generic [ref=e53]:
+      - text: Don't have an account?
+      - link "Create one" [ref=e54] [cursor=pointer]:
+        - /url: /register
+```
