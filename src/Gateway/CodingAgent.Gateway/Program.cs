@@ -313,6 +313,16 @@ app.UseWhen(context =>
         subApp.UseAuthorization();
     });
 
+// Feature flags: expose current values to aid cutover verification
+var useLegacyChat = builder.Configuration.GetValue<bool>("Features:UseLegacyChat");
+var useLegacyOrch = builder.Configuration.GetValue<bool>("Features:UseLegacyOrchestration");
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-Feature-UseLegacyChat"] = useLegacyChat ? "true" : "false";
+    ctx.Response.Headers["X-Feature-UseLegacyOrchestration"] = useLegacyOrch ? "true" : "false";
+    await next();
+});
+
 // Expose Prometheus scraping endpoint
 app.MapPrometheusScrapingEndpoint("/metrics");
 

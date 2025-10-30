@@ -362,3 +362,10 @@ BEGIN
     RAISE NOTICE 'Created schemas: chat, orchestration, github, cicd, auth';
     RAISE NOTICE 'Total tables created: 20';
 END $$;
+
+-- ============================================
+-- Phase 5: Migration helpers (idempotent)
+-- ============================================
+-- These are placeholders for data backfill; real migration uses standalone scripts.
+-- Example: ensure columns/indexes used by migration exist.
+-- (No-op in current schema)
