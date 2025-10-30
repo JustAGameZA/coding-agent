@@ -54,6 +54,12 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON chat.messages(convers
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON chat.messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON chat.attachments(message_id);
 
+-- Additional performance indexes (Phase 5 optimization)
+-- Composite index to speed up fetching latest messages per conversation
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created_at ON chat.messages(conversation_id, created_at DESC);
+-- Trigram GIN index for message content search
+CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON chat.messages USING gin (content gin_trgm_ops);
+
 -- ==========================================
 -- Schema: orchestration
 -- Service: Orchestration Service
@@ -106,6 +112,11 @@ CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON orchestration.coding_tasks(cr
 CREATE INDEX IF NOT EXISTS idx_executions_task_id ON orchestration.task_executions(task_id);
 CREATE INDEX IF NOT EXISTS idx_executions_status ON orchestration.task_executions(status);
 CREATE INDEX IF NOT EXISTS idx_results_execution_id ON orchestration.execution_results(execution_id);
+
+-- Additional orchestration indexes for common queries
+CREATE INDEX IF NOT EXISTS idx_tasks_status_created_at ON orchestration.coding_tasks(status, created_at DESC);
+-- Optional trigram index to accelerate title search
+CREATE INDEX IF NOT EXISTS idx_tasks_title_trgm ON orchestration.coding_tasks USING gin (title gin_trgm_ops);
 
 -- ==========================================
 -- Schema: github

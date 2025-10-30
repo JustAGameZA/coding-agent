@@ -107,6 +107,18 @@ docker compose -f docker-compose.yml -f docker-compose.apps.dev.yml logs -f gate
 - NuGet/pip/npm caches persist across restarts
 - Source code mounted for hot reload
 
+#### Playwright Browsers for CI/E2E
+
+If you run E2E or Browser service integration tests in CI, ensure Playwright browsers are installed before tests:
+
+```bash
+npx playwright install --with-deps chromium
+# optionally
+npx playwright install firefox
+```
+
+In containerized CI, add the install step before running the test job.
+
 ### 3. Production Mode (Optimized Builds)
 
 ```bash
