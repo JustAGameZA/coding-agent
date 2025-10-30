@@ -291,6 +291,9 @@ app.MapGet("/ping", () => Results.Ok(new
 // Auth endpoints
 app.MapAuthEndpoints();
 
+// Admin endpoints
+app.MapAdminEndpoints();
+
 // Health checks
 app.MapHealthChecks("/health");
 

@@ -228,6 +228,51 @@ export RabbitMQ__Host=localhost
 
 **Documentation**: See [Auth Implementation Guide](./docs/AUTH-IMPLEMENTATION.md) for complete details.
 
+### Admin Features
+
+The platform includes role-based admin features for user management.
+
+**Default Admin User** (Development only):
+```bash
+# Seed admin user
+.\seed-admin-user.ps1 -Email "admin@example.com" -Password "Admin@1234"
+
+# Login as admin
+Username: admin
+Password: Admin@1234
+```
+
+⚠️ **Security Warning**: Change the default admin password immediately in production!
+
+**Admin Capabilities**:
+- ✅ View all users (paginated list with search/filter)
+- ✅ Manage user roles (add/remove Admin role)
+- ✅ Activate/deactivate user accounts
+- ✅ View user details and session count
+- ✅ Monitor infrastructure health
+
+**Admin Pages**:
+- **User Management**: `http://localhost:4200/admin/users`
+- **Infrastructure**: `http://localhost:4200/admin/infrastructure`
+
+**API Endpoints** (require `Admin` role in JWT):
+```bash
+# Get all users
+GET /api/auth/admin/users?page=1&pageSize=20
+
+# Update user roles
+PUT /api/auth/admin/users/{id}/roles
+{"roles": ["Admin", "User"]}
+
+# Deactivate user
+PUT /api/auth/admin/users/{id}/deactivate
+```
+
+**Documentation**:
+- 🔐 [Admin Implementation Summary](./ADMIN-FEATURES-IMPLEMENTATION-SUMMARY.md)
+- 🧪 [E2E Admin Tests](./E2E-ADMIN-TESTS-SUMMARY.md)
+- 📋 [QA Deliverables](./QA-DELIVERABLES-ADMIN-E2E.md)
+
 --- Development Roadmap
 
 **Current Status**: ✅ Phase 3 Complete (Integration Services)

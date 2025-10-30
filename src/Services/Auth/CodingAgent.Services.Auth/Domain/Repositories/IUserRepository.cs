@@ -10,4 +10,5 @@ public interface IUserRepository
     Task<User> CreateAsync(User user, CancellationToken ct = default);
     Task UpdateAsync(User user, CancellationToken ct = default);
     Task<bool> ExistsAsync(string username, string email, CancellationToken ct = default);
+    Task<(List<User> Users, int TotalCount)> GetPagedAsync(int page, int pageSize, string? searchQuery = null, string? roleFilter = null, CancellationToken ct = default);
 }

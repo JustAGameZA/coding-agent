@@ -171,19 +171,20 @@ export async function waitForAPICall(page: Page, urlPattern: string) {
 }
 
 // Mock Users for Auth Testing
+// Using timestamp to ensure unique users for each test run
 export const mockUsers = {
   validUser: {
-    username: 'testuser',
-    email: 'testuser@example.com',
-    password: 'Test@1234'
+    username: `e2euser_${Date.now()}`,
+    email: `e2euser_${Date.now()}@example.com`,
+    password: 'E2ETest@1234!'
   },
   adminUser: {
-    username: 'admin',
-    email: 'admin@example.com',
-    password: 'Admin@1234'
+    username: `e2eadmin_${Date.now()}`,
+    email: `e2eadmin_${Date.now()}@example.com`,
+    password: 'E2EAdmin@1234!'
   },
   invalidPassword: {
-    username: 'testuser',
+    username: `e2euser_${Date.now()}`,
     password: 'WrongPassword123!'
   }
 };

@@ -1,11 +1,34 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { LoginPage, RegisterPage } from './pages/auth.page';
-import { mockAuthAPI, mockUsers, setupAuthenticatedUser, waitForAngular } from './fixtures';
+import { mockUsers, waitForAngular } from './fixtures';
 
 /**
  * Authentication E2E Tests
  * Tests login, registration, logout, and protected route flows
+ * NOTE: Tests run against REAL backend services (no mocks)
  */
+
+// Helper to register a test user before login tests
+async function registerTestUser(page: Page, username: string, email: string, password: string) {
+  const registerPage = new RegisterPage(page);
+  await registerPage.goto();
+  await waitForAngular(page);
+  await registerPage.fillForm(username, email, password, password);
+  await registerPage.registerButton.click();
+  
+  // Wait for registration to complete
+  // It might auto-login and redirect to dashboard, or show an error
+  await page.waitForTimeout(2000); // Give registration time to process
+  
+  // Navigate back to home/login - clear any existing session
+  await page.evaluate(() => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('refresh_token');
+  });
+  
+  await page.goto('/login');
+  await waitForAngular(page);
+}
 
 test.describe('Login Flow', () => {
   let loginPage: LoginPage;
@@ -13,8 +36,7 @@ test.describe('Login Flow', () => {
   test.beforeEach(async ({ page }) => {
     loginPage = new LoginPage(page);
     
-    // Mock auth API BEFORE navigation
-    await mockAuthAPI(page);
+    // NO MOCKS - Test against real backend services
     
     await loginPage.goto();
     await waitForAngular(page);
@@ -30,8 +52,11 @@ test.describe('Login Flow', () => {
   });
   
   test('should successfully login with valid credentials', async ({ page }) => {
-    const { username, password } = mockUsers.validUser;
+    // First register the test user
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
     
+    // Now login with the registered credentials
     await loginPage.fillForm(username, password);
     await loginPage.loginButton.click();
     
@@ -102,8 +127,11 @@ test.describe('Login Flow', () => {
   });
   
   test('should remember me checkbox work', async ({ page }) => {
-    const { username, password } = mockUsers.validUser;
+    // First register the test user
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
     
+    // Now test remember me functionality
     await loginPage.fillForm(username, password, true);
     
     // Verify checkbox is checked (Material checkbox - check the input inside)
@@ -149,8 +177,7 @@ test.describe('Registration Flow', () => {
   test.beforeEach(async ({ page }) => {
     registerPage = new RegisterPage(page);
     
-    // Mock auth API BEFORE navigation
-    await mockAuthAPI(page);
+    // NO MOCKS - Test against real backend services
     
     await registerPage.goto();
     await waitForAngular(page);
@@ -270,8 +297,12 @@ test.describe('Registration Flow', () => {
 
 test.describe('Logout Flow', () => {
   test('should successfully logout', async ({ page }) => {
-    // Setup authenticated user
-    await setupAuthenticatedUser(page);
+    // Setup authenticated user - NO MOCKS, real login first
+    await page.goto('/login');
+    const loginPage = new LoginPage(page);
+    const { username, password } = mockUsers.validUser;
+    await loginPage.login(username, password);
+    await page.waitForURL('**/dashboard', { timeout: 5000 });
     
     // Navigate to dashboard
     await page.goto('/dashboard');
@@ -334,8 +365,7 @@ test.describe('Protected Routes', () => {
     await page.goto('/dashboard');
     await page.waitForURL(/.*login/, { timeout: 5000 });
     
-    // Mock auth and login
-    await mockAuthAPI(page);
+    // NO MOCKS - Login with real backend
     
     const loginPage = new LoginPage(page);
     const { username, password } = mockUsers.validUser;
@@ -374,7 +404,7 @@ test.describe('Mobile Responsive Auth', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     
     const loginPage = new LoginPage(page);
-    await mockAuthAPI(page);
+    // NO MOCKS - Test real backend
     await loginPage.goto();
     
     await expect(loginPage.loginContainer).toBeVisible();
@@ -387,7 +417,7 @@ test.describe('Mobile Responsive Auth', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     
     const registerPage = new RegisterPage(page);
-    await mockAuthAPI(page);
+    // NO MOCKS - Test real backend
     await registerPage.goto();
     
     await expect(registerPage.registerContainer).toBeVisible();

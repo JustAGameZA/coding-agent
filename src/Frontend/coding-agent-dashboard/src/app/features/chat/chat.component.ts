@@ -10,7 +10,6 @@ import { SignalRService } from '../../core/services/signalr.service';
 import { ChatService } from '../../core/services/chat.service';
 import { ConversationDto, MessageDto } from '../../core/models/chat.models';
 import * as signalR from '@microsoft/signalr';
-import { PresenceService } from '../../core/services/presence.service';
 
 @Component({
   selector: 'app-chat',
@@ -29,7 +28,7 @@ import { PresenceService } from '../../core/services/presence.service';
           <mat-card-header>
             <mat-card-title>
               <div class="title-row">
-                <span [attr.data-testid]="'chat-title'">{{ selectedConversation()?.title || 'Select a conversation' }}</span>
+                <span [attr.data-testid]="'chat-title'">{{ selectedConversation()?.title || 'Chat with AI Agent' }}</span>
                 <span class="spacer"></span>
                 <span 
                   class="conn" 
@@ -41,7 +40,13 @@ import { PresenceService } from '../../core/services/presence.service';
                 <span class="reconnect" *ngIf="connState() === 'Reconnecting' && nextDelay() !== null">
                   Reconnecting in {{ (nextDelay() || 0) / 1000 | number:'1.0-0' }}s
                 </span>
-                <span class="presence" *ngIf="isConnected()" [attr.data-testid]="'online-count'">Online: {{ onlineCount() }}</span>
+                <span 
+                  class="agent-status" 
+                  *ngIf="agentTyping()" 
+                  [attr.data-testid]="'agent-typing'">
+                  <mat-icon class="thinking-icon">psychology</mat-icon>
+                  <span class="status-text">AI is thinking...</span>
+                </span>
               </div>
             </mat-card-title>
           </mat-card-header>
@@ -77,21 +82,26 @@ import { PresenceService } from '../../core/services/presence.service';
     .conn.ok { color: #2e7d32; }
     .conn.reconnecting { color: #f9a825; }
     .upload { padding: 0 16px 16px; }
+    .agent-status { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(103, 58, 183, 0.1); border-radius: 12px; font-size: 0.875rem; color: #673ab7; animation: pulse 2s infinite; }
+    .agent-status .thinking-icon { font-size: 20px; width: 20px; height: 20px; animation: rotate 2s linear infinite; }
+    .agent-status .status-text { font-weight: 500; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   `]
 })
 export class ChatComponent {
-  constructor(private chatService: ChatService, private signalR: SignalRService, private presence: PresenceService) {
+  constructor(private chatService: ChatService, private signalR: SignalRService) {
     // Initialize signals that depend on injected services in the constructor to avoid TS2729
     this.isConnected = this.signalR.isConnected;
   }
 
   selectedConversation = signal<ConversationDto | null>(null);
   messages = signal<MessageDto[]>([]);
+  agentTyping = signal<boolean>(false);
   isConnected!: WritableSignal<boolean>;
   uploading = signal<boolean>(false);
   uploadProgress = signal<number>(0);
   nextDelay = () => this.signalR.nextRetryDelayMs();
-  onlineCount = () => this.presence.onlineCount();
   connState = () => {
     const s = this.signalR.connectionState();
     switch (s) {
@@ -106,17 +116,20 @@ export class ChatComponent {
 
   async ngOnInit() {
     await this.signalR.connect();
-    this.presence.subscribeToHub(this.signalR);
+    
     this.signalR.on<MessageDto>('ReceiveMessage', (msg) => {
       this.messages.update(curr => [...curr, msg]);
     });
-    this.signalR.on<any>('UserTyping', () => { /* optionally show typing */ });
+    
+    // Listen for agent typing indicator
+    this.signalR.on<boolean>('AgentTyping', (isTyping) => {
+      this.agentTyping.set(isTyping);
+    });
   }
 
   async onConversationSelected(c: ConversationDto) {
     this.selectedConversation.set(c);
     await this.signalR.joinConversation(c.id);
-    await this.presence.fetchInitial(c.id);
     // Load last messages (optional, if API supports it)
     this.chatService.listMessages(c.id).subscribe(res => this.messages.set(res.items || []));
   }
@@ -124,6 +137,8 @@ export class ChatComponent {
   async send(content: string) {
     const c = this.selectedConversation();
     if (!c) return;
+    
+    // Send message to AI agent for processing
     await this.signalR.sendMessage(c.id, content);
   }
 

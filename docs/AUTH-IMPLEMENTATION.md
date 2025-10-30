@@ -578,6 +578,322 @@ Rate limiting is configured at the **Gateway level** (not in Auth Service):
 
 **Implementation**: ASP.NET Core Rate Limiting middleware in Gateway with Redis-based distributed storage.
 
+---
+
+## Role-Based Access Control (RBAC)
+
+### Overview
+
+The Auth Service implements role-based access control using CSV-stored roles in the `auth.users` table. This approach provides flexibility for adding new roles without schema changes while maintaining query performance.
+
+### Role Storage Model
+
+**Database Schema**:
+```sql
+CREATE TABLE auth.users (
+    ...,
+    roles VARCHAR(500) NOT NULL DEFAULT 'User',  -- CSV: "Admin,User"
+    ...
+);
+
+CREATE INDEX ix_users_roles ON auth.users 
+    USING gin(string_to_array(roles, ','));
+```
+
+**Entity Model**:
+```csharp
+public class User
+{
+    public string Roles { get; private set; } = "User";
+    
+    public string[] GetRoles() => 
+        Roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    
+    public void UpdateRoles(string roles)
+    {
+        Roles = roles;
+        UpdatedAt = DateTime.UtcNow;
+    }
+}
+```
+
+### Built-in Roles
+
+| Role | Description | Default Permissions |
+|------|-------------|---------------------|
+| `User` | Standard user | Access to own profile, chat, tasks |
+| `Admin` | Administrator | All User permissions + user management |
+
+**Example Role Values**:
+- `"User"` - Regular user
+- `"Admin"` - Administrator only (rare)
+- `"Admin,User"` - Administrator with user access (recommended)
+- `"Admin,Moderator,User"` - Multiple roles
+
+### JWT Role Claims
+
+**Token Generation**:
+```csharp
+public class JwtTokenGenerator : IJwtTokenGenerator
+{
+    public string GenerateToken(User user)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.UniqueName, user.Username),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new("uid", user.Id.ToString())
+        };
+        
+        // Add each role as separate claim
+        foreach (var role in user.GetRoles())
+        {
+            claims.Add(new Claim("role", role));
+        }
+        
+        // Create JWT with all claims
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(15),
+            signingCredentials: credentials
+        );
+        
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+}
+```
+
+**Token Payload Example**:
+```json
+{
+  "sub": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "unique_name": "admin",
+  "email": "admin@example.com",
+  "uid": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "role": ["Admin", "User"],  // Array of roles
+  "iss": "CodingAgent",
+  "aud": "CodingAgent.API",
+  "exp": 1730034600
+}
+```
+
+### Backend Authorization
+
+**Endpoint-Level Authorization**:
+```csharp
+// Require Admin role for entire endpoint group
+var adminGroup = app.MapGroup("/admin")
+    .WithTags("Admin")
+    .RequireAuthorization(policy => policy.RequireRole("Admin"))
+    .WithOpenApi();
+
+adminGroup.MapGet("/users", GetUsers);  // Automatically requires Admin
+adminGroup.MapPut("/users/{id}/roles", UpdateUserRoles);
+```
+
+**Manual Claims Check** (when needed):
+```csharp
+private static async Task<IResult> UpdateUserRoles(
+    Guid id,
+    UpdateUserRolesRequest request,
+    ClaimsPrincipal user,  // Injected by ASP.NET Core
+    ...)
+{
+    // Get current user's ID from claims
+    var currentUserId = GetUserIdFromClaims(user);
+    
+    // Prevent removing own admin role
+    if (currentUserId == id && !request.Roles.Contains("Admin"))
+    {
+        return Results.BadRequest(new ProblemDetails
+        {
+            Title = "Invalid Operation",
+            Detail = "Cannot remove Admin role from your own account"
+        });
+    }
+    
+    // ... rest of logic
+}
+```
+
+### Frontend Authorization
+
+**Route Guards**:
+```typescript
+// src/app/core/guards/role.guard.ts
+export const roleGuard = (requiredRole: string): CanActivateFn => {
+  return () => {
+    const authService = inject(AuthService);
+    const router = inject(Router);
+    
+    const user = authService.currentUser();
+    if (!user || !user.roles?.includes(requiredRole)) {
+      return router.createUrlTree(['/dashboard']);
+    }
+    return true;
+  };
+};
+```
+
+**Route Configuration**:
+```typescript
+// src/app/features/admin/admin.routes.ts
+export const adminRoutes: Routes = [
+  {
+    path: 'users',
+    loadComponent: () => import('./users/user-list.component'),
+    canActivate: [roleGuard('Admin')]  // Requires Admin role
+  }
+];
+```
+
+**UI Visibility**:
+```html
+<!-- src/app/shared/layout/sidenav/sidenav.component.html -->
+<mat-nav-list>
+  <!-- Show to all authenticated users -->
+  <a mat-list-item routerLink="/dashboard">Dashboard</a>
+  <a mat-list-item routerLink="/chat">Chat</a>
+  
+  <!-- Admin-only navigation -->
+  @if (hasRole('Admin')) {
+    <mat-divider></mat-divider>
+    <div class="nav-section">Admin</div>
+    <a mat-list-item routerLink="/admin/users">
+      <mat-icon>people</mat-icon>
+      User Management
+    </a>
+    <a mat-list-item routerLink="/admin/infrastructure">
+      <mat-icon>dns</mat-icon>
+      Infrastructure
+    </a>
+  }
+</mat-nav-list>
+```
+
+### Admin User Management API
+
+**Endpoints**:
+
+| Method | Endpoint | Description | Safety Checks |
+|--------|----------|-------------|---------------|
+| GET | `/admin/users` | List users (paginated) | None |
+| GET | `/admin/users/{id}` | Get user details | None |
+| PUT | `/admin/users/{id}/roles` | Update user roles | Cannot remove own Admin role, last Admin check |
+| PUT | `/admin/users/{id}/activate` | Activate user | None |
+| PUT | `/admin/users/{id}/deactivate` | Deactivate user | Cannot deactivate self, last Admin check |
+
+**Safety Checks Implementation**:
+
+1. **Prevent Self-Lockout**:
+```csharp
+// Cannot remove own admin role
+var currentUserId = GetUserIdFromClaims(user);
+if (currentUserId == id && !request.Roles.Contains("Admin"))
+{
+    return Results.BadRequest("Cannot remove Admin role from your own account");
+}
+
+// Cannot deactivate own account
+if (currentUserId == id)
+{
+    return Results.BadRequest("Cannot deactivate your own account");
+}
+```
+
+2. **Last Administrator Protection**:
+```csharp
+// Check if removing last admin
+if (targetUser.GetRoles().Contains("Admin") && !request.Roles.Contains("Admin"))
+{
+    var (allUsers, _) = await repo.GetPagedAsync(1, 1000, null, "Admin", ct);
+    var activeAdminCount = allUsers.Count(u => u.IsActive && u.GetRoles().Contains("Admin"));
+    
+    if (activeAdminCount <= 1)
+    {
+        return Results.BadRequest("Cannot remove Admin role from the last active administrator");
+    }
+}
+```
+
+### Seeding Admin User
+
+**PowerShell Script** (`seed-admin-user.ps1`):
+```powershell
+param(
+    [string]$Email = "admin@example.com",
+    [string]$Password = "Admin@1234"
+)
+
+# Register user via API
+$registerResponse = Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:5000/api/auth/register" `
+    -ContentType "application/json" `
+    -Body (@{
+        username = "admin"
+        email = $Email
+        password = $Password
+        confirmPassword = $Password
+    } | ConvertTo-Json)
+
+# Update roles to Admin in database
+psql -d coding_agent -c @"
+UPDATE auth.users 
+SET roles = 'Admin,User' 
+WHERE email = '$Email';
+"@
+
+Write-Host "Admin user seeded successfully" -ForegroundColor Green
+```
+
+### Testing RBAC
+
+**Unit Test Example**:
+```csharp
+[Fact]
+public async Task UpdateUserRoles_WhenRemovingOwnAdminRole_ShouldReturnBadRequest()
+{
+    // Arrange
+    var adminUser = new User("admin", "admin@test.com", "hash", "Admin,User");
+    var request = new UpdateUserRolesRequest(new[] { "User" });
+    var claimsPrincipal = CreateClaimsPrincipal(adminUser.Id, new[] { "Admin" });
+    
+    // Act
+    var result = await AdminEndpoints.UpdateUserRoles(
+        adminUser.Id, request, repo, validator, claimsPrincipal, logger, ct);
+    
+    // Assert
+    result.Should().BeOfType<BadRequest<ProblemDetails>>();
+}
+```
+
+### Future Enhancements
+
+The current CSV-based role model is suitable for Phase 4. For Phase 5 and beyond, consider:
+
+1. **Permission-Based Authorization**:
+```sql
+CREATE TABLE auth.permissions (id UUID, name VARCHAR(50), description TEXT);
+CREATE TABLE auth.role_permissions (role_id UUID, permission_id UUID);
+```
+
+2. **Role Hierarchies**:
+```json
+{
+  "Admin": { "inherits": ["Moderator"], "permissions": [...] },
+  "Moderator": { "inherits": ["User"], "permissions": [...] },
+  "User": { "inherits": [], "permissions": [...] }
+}
+```
+
+3. **Dynamic Role Management**:
+- API to create/delete roles
+- UI for role/permission assignment
+- Role templates for common patterns
+
 ### CORS Configuration
 
 **Development**:

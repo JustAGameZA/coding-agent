@@ -5,7 +5,7 @@
 **Target Completion**: May 2026
 **Team Size**: 1 developer + AI assistance (GitHub Copilot)
 **Current Phase**: Phase 3 Complete → Phase 4 Starting (Frontend & Dashboard)
-**Last Updated**: October 27, 2025
+**Last Updated**: October 28, 2025
 
 ---
 
@@ -28,7 +28,11 @@
 - ✅ 141 unit tests passing with trait categorization
 - ✅ SignalR hub implemented and mapped at `/hubs/chat`
 - ✅ Integration tests with Testcontainers
-- 🔜 Outstanding: SignalR hub auth + presence tracking
+- ✅ Hub JWT auth in place (query-string token supported for SignalR)
+- ✅ Refactor to user→agent model complete: AgentTyping lifecycle, optimistic echo
+- ✅ Agent callback implemented: `POST /conversations/{id}/agent-response` (restricted to Orchestration role)
+- ✅ OpenAPI updated (Agent tag, callback path, ProblemDetails schemas)
+- ✅ New unit tests for validator (3 tests) and hub logging fix; all unit tests green
 
 **Orchestration Service** ✅ **PRODUCTION-READY** (October 27, 2025)
 - ✅ Task domain model implemented (#89)
@@ -94,6 +98,7 @@
 - ✅ Message bus wiring complete (MassTransit consumers registered)
 - ✅ Health checks configured for all services
 - ✅ OpenTelemetry tracing and metrics enabled
+ - ✅ Chat agent callback secured via policy `OrchestrationService` (role="orchestration")
 
 Next up: Phase 4 — Frontend & Dashboard
 - Rebuild Angular dashboard with microservices integration
@@ -975,10 +980,11 @@ Fix bugs, optimize performance, complete documentation.
 
 **Phase 4: Frontend & Dashboard (Starting Week 19)**
 
-1. **Dashboard Service (BFF)**: Implement data aggregation endpoints (`/dashboard/stats`, `/dashboard/tasks`, `/dashboard/activity`) with Redis caching
-2. **Angular Dashboard Rebuild**: Rebuild task list and chat components with microservices integration; add real-time SignalR notifications
-3. **E2E Testing**: Write Cypress E2E tests for full user flows (chat conversation, task creation → execution → PR, error handling)
-4. **Performance Optimization**: Ensure all endpoints < 500ms p95 latency; add database indexes and cache tuning
+1. **Gateway routing (security)**: Ensure Gateway restricts `POST /conversations/{id}/agent-response` to Orchestration identity; add route + auth checks
+2. **Dashboard Service (BFF)**: Implement data aggregation endpoints (`/dashboard/stats`, `/dashboard/tasks`, `/dashboard/activity`) with Redis caching
+3. **Angular Dashboard Rebuild**: Rebuild task list and chat components with microservices integration; add real-time SignalR notifications
+4. **E2E Testing**: Write Playwright E2E tests for user→agent chat flow via SignalR and callback; expand cross-browser matrix
+5. **Performance Optimization**: Ensure all endpoints < 500ms p95 latency; add database indexes and cache tuning
 
 **Outstanding Phase 2/3 Items (Low Priority)**
 - Chat: SignalR hub authentication + presence tracking, file attachments (multipart + storage)

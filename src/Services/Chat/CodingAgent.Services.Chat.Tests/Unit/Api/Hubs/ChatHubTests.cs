@@ -1,6 +1,9 @@
 using CodingAgent.Services.Chat.Api.Hubs;
+using CodingAgent.Services.Chat.Domain.Entities;
 using CodingAgent.Services.Chat.Domain.Services;
+using CodingAgent.SharedKernel.Domain.Events;
 using FluentAssertions;
+using MassTransit;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -13,20 +16,23 @@ namespace CodingAgent.Services.Chat.Tests.Unit.Api.Hubs;
 public class ChatHubTests
 {
     private readonly TestLogger<ChatHub> _testLogger;
-    private readonly Mock<IPresenceService> _presenceServiceMock;
+    private readonly Mock<IConversationService> _conversationServiceMock;
+    private readonly Mock<IPublishEndpoint> _publishEndpointMock;
     private readonly Mock<HubCallerContext> _contextMock;
     private readonly Mock<IHubCallerClients> _clientsMock;
     private readonly Mock<IClientProxy> _clientProxyMock;
     private readonly Mock<IGroupManager> _groupManagerMock;
     private readonly ChatHub _chatHub;
     private readonly ClaimsPrincipal _testUser;
-    private const string TestUserId = "test-user-123";
+    private static readonly Guid TestUserGuid = Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+    private static readonly string TestUserId = TestUserGuid.ToString();
     private const string TestConnectionId = "test-connection-id";
 
     public ChatHubTests()
     {
         _testLogger = new TestLogger<ChatHub>();
-        _presenceServiceMock = new Mock<IPresenceService>();
+        _conversationServiceMock = new Mock<IConversationService>();
+        _publishEndpointMock = new Mock<IPublishEndpoint>();
         _contextMock = new Mock<HubCallerContext>();
         _clientsMock = new Mock<IHubCallerClients>();
         _clientProxyMock = new Mock<IClientProxy>();
@@ -50,7 +56,7 @@ public class ChatHubTests
         _clientsMock.Setup(c => c.OthersInGroup(It.IsAny<string>())).Returns(_clientProxyMock.Object);
 
         // Create ChatHub instance
-        _chatHub = new ChatHub(_testLogger, _presenceServiceMock.Object)
+        _chatHub = new ChatHub(_conversationServiceMock.Object, _publishEndpointMock.Object, _testLogger)
         {
             Context = _contextMock.Object,
             Clients = _clientsMock.Object,
@@ -86,214 +92,10 @@ public class ChatHubTests
     public void Constructor_WithValidParameters_ShouldCreateInstance()
     {
         // Arrange & Act
-        var hub = new ChatHub(_testLogger, _presenceServiceMock.Object);
+        var hub = new ChatHub(_conversationServiceMock.Object, _publishEndpointMock.Object, _testLogger);
 
         // Assert
         hub.Should().NotBeNull();
-    }
-
-    #endregion
-
-    #region OnConnectedAsync Tests
-
-    [Fact]
-    public async Task OnConnectedAsync_ShouldLogConnection()
-    {
-        // Act
-        await _chatHub.OnConnectedAsync();
-
-        // Assert
-        var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Should().NotBeEmpty();
-        infoLogs.Any(r => r.Message.Contains(TestUserId) && r.Message.Contains(TestConnectionId) && r.Message.Contains("connected", StringComparison.OrdinalIgnoreCase))
-            .Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task OnConnectedAsync_ShouldBroadcastPresenceOnline()
-    {
-        // Arrange
-        _clientProxyMock
-            .Setup(x => x.SendCoreAsync(
-                It.IsAny<string>(),
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await _chatHub.OnConnectedAsync();
-
-        // Assert
-        _clientProxyMock.Verify(
-            x => x.SendCoreAsync(
-                "UserPresenceChanged",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task OnConnectedAsync_ShouldSendCorrectPresenceData()
-    {
-        // Arrange
-        object? capturedData = null;
-        _clientProxyMock
-            .Setup(x => x.SendCoreAsync(
-                "UserPresenceChanged",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<string, object?[], CancellationToken>((method, args, ct) =>
-            {
-                capturedData = args[0];
-            })
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await _chatHub.OnConnectedAsync();
-
-        // Assert
-        capturedData.Should().NotBeNull();
-        var data = capturedData!.GetType().GetProperty("userId")?.GetValue(capturedData);
-        data.Should().Be(TestUserId);
-        
-        var isOnline = capturedData.GetType().GetProperty("isOnline")?.GetValue(capturedData);
-        isOnline.Should().Be(true);
-    }
-
-    #endregion
-
-    #region OnDisconnectedAsync Tests
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WithoutException_ShouldLogDisconnection()
-    {
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Should().NotBeEmpty();
-        infoLogs.Any(r => r.Message.Contains(TestUserId) && r.Message.Contains(TestConnectionId) && r.Message.Contains("disconnected", StringComparison.OrdinalIgnoreCase))
-            .Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WithException_ShouldLogInformation()
-    {
-        // Arrange
-        var exception = new Exception("Test exception");
-
-        // Act
-        await _chatHub.OnDisconnectedAsync(exception);
-
-        // Assert
-        var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Should().NotBeEmpty();
-        infoLogs.Any(r => r.Message.Contains(TestUserId) && r.Message.Contains("disconnected"))
-            .Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_ShouldUpdatePresence()
-    {
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        _presenceServiceMock.Verify(
-            x => x.SetUserOfflineAsync(TestUserId, TestConnectionId, It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_ShouldCheckIfUserIsStillOnline()
-    {
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        _presenceServiceMock.Verify(
-            x => x.IsUserOnlineAsync(TestUserId, It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WhenUserOffline_ShouldBroadcastPresenceOffline()
-    {
-        // Arrange
-        _presenceServiceMock
-            .Setup(x => x.IsUserOnlineAsync(TestUserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        _clientProxyMock
-            .Setup(x => x.SendCoreAsync(
-                It.IsAny<string>(),
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        _clientProxyMock.Verify(
-            x => x.SendCoreAsync(
-                "UserPresenceChanged",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WhenUserStillOnline_ShouldNotNotifyOthers()
-    {
-        // Arrange
-        _presenceServiceMock
-            .Setup(x => x.IsUserOnlineAsync(TestUserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        _clientProxyMock.Verify(
-            x => x.SendCoreAsync(
-                "UserPresenceChanged",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WhenUserOffline_ShouldSendCorrectPresenceData()
-    {
-        // Arrange
-        _presenceServiceMock
-            .Setup(x => x.IsUserOnlineAsync(TestUserId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        object? capturedData = null;
-        _clientProxyMock
-            .Setup(x => x.SendCoreAsync(
-                "UserPresenceChanged",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<string, object?[], CancellationToken>((method, args, ct) =>
-            {
-                capturedData = args[0];
-            })
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await _chatHub.OnDisconnectedAsync(null);
-
-        // Assert
-        capturedData.Should().NotBeNull();
-        var data = capturedData!.GetType().GetProperty("userId")?.GetValue(capturedData);
-        data.Should().Be(TestUserId);
-        
-        var isOnline = capturedData.GetType().GetProperty("isOnline")?.GetValue(capturedData);
-        isOnline.Should().Be(false);
     }
 
     #endregion
@@ -326,7 +128,7 @@ public class ChatHubTests
 
         // Assert
         var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Any(r => r.Message.Contains(TestUserId)
+        infoLogs.Any(r => r.Message.Contains(TestUserGuid.ToString())
                        && r.Message.Contains(TestConnectionId)
                        && r.Message.Contains(conversationId)
                        && r.Message.Contains("joined", StringComparison.OrdinalIgnoreCase))
@@ -363,7 +165,7 @@ public class ChatHubTests
 
         // Assert
         var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Any(r => r.Message.Contains(TestUserId)
+        infoLogs.Any(r => r.Message.Contains(TestUserGuid.ToString())
                        && r.Message.Contains(TestConnectionId)
                        && r.Message.Contains(conversationId)
                        && r.Message.Contains("left", StringComparison.OrdinalIgnoreCase))
@@ -375,18 +177,62 @@ public class ChatHubTests
     #region SendMessage Tests
 
     [Fact]
+    public async Task SendMessage_ShouldPersistMessage()
+    {
+        // Arrange
+        var conversationId = Guid.NewGuid().ToString();
+        var content = "Hello, world!";
+        var userId = Guid.Parse(TestUserId);
+
+        var message = new Message(
+            Guid.Parse(conversationId),
+            userId,
+            content,
+            MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(
+                It.IsAny<Guid>(),
+                userId,
+                content,
+                MessageRole.User,
+                default))
+            .ReturnsAsync(message);
+
+        // Act
+        await _chatHub.SendMessage(conversationId, content);
+
+        // Assert
+        _conversationServiceMock.Verify(
+            s => s.AddMessageAsync(
+                Guid.Parse(conversationId),
+                userId,
+                content,
+                MessageRole.User,
+                default),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task SendMessage_ShouldLogAction()
     {
         // Arrange
-        var conversationId = "conversation-123";
+        var conversationId = Guid.NewGuid().ToString();
         var content = "Hello, world!";
+        var userId = TestUserGuid;
+
+        var message = new Message(Guid.Parse(conversationId), userId, content, MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(It.IsAny<Guid>(), userId, It.IsAny<string>(), MessageRole.User, default))
+            .ReturnsAsync(message);
 
         // Act
         await _chatHub.SendMessage(conversationId, content);
 
         // Assert
         var infoLogs = _testLogger.Records.Where(r => r.LogLevel == LogLevel.Information).ToList();
-        infoLogs.Any(r => r.Message.Contains(TestUserId)
+        infoLogs.Any(r => r.Message.Contains(TestUserGuid.ToString())
                        && r.Message.Contains(conversationId)
                        && r.Message.Contains("sent message", StringComparison.OrdinalIgnoreCase))
             .Should().BeTrue();
@@ -396,8 +242,15 @@ public class ChatHubTests
     public async Task SendMessage_ShouldBroadcastToGroup()
     {
         // Arrange
-        var conversationId = "conversation-123";
+        var conversationId = Guid.NewGuid().ToString();
         var content = "Hello, world!";
+        var userId = Guid.Parse(TestUserId);
+
+        var message = new Message(Guid.Parse(conversationId), userId, content, MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(It.IsAny<Guid>(), userId, It.IsAny<string>(), MessageRole.User, default))
+            .ReturnsAsync(message);
 
         _clientProxyMock
             .Setup(x => x.SendCoreAsync(
@@ -412,7 +265,7 @@ public class ChatHubTests
         // Assert
         _clientsMock.Verify(
             x => x.Group(conversationId),
-            Times.Once);
+            Times.AtLeastOnce);
 
         _clientProxyMock.Verify(
             x => x.SendCoreAsync(
@@ -426,9 +279,16 @@ public class ChatHubTests
     public async Task SendMessage_ShouldSendCorrectMessageData()
     {
         // Arrange
-        var conversationId = "conversation-123";
+        var conversationId = Guid.NewGuid().ToString();
         var content = "Hello, world!";
+        var userId = Guid.Parse(TestUserId);
         object? capturedData = null;
+
+        var message = new Message(Guid.Parse(conversationId), userId, content, MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(It.IsAny<Guid>(), userId, It.IsAny<string>(), MessageRole.User, default))
+            .ReturnsAsync(message);
 
         _clientProxyMock
             .Setup(x => x.SendCoreAsync(
@@ -446,211 +306,94 @@ public class ChatHubTests
 
         // Assert
         capturedData.Should().NotBeNull();
-        
-        var userId = capturedData!.GetType().GetProperty("UserId")?.GetValue(capturedData);
-        userId.Should().Be(TestUserId);
-        
-        var convId = capturedData.GetType().GetProperty("ConversationId")?.GetValue(capturedData);
-        convId.Should().Be(conversationId);
-        
+
+        var userIdProp = capturedData!.GetType().GetProperty("UserId")?.GetValue(capturedData);
+        userIdProp.Should().Be(userId);
+
+        var convIdProp = capturedData.GetType().GetProperty("ConversationId")?.GetValue(capturedData);
+        convIdProp.Should().Be(Guid.Parse(conversationId));
+
         var messageContent = capturedData.GetType().GetProperty("Content")?.GetValue(capturedData);
         messageContent.Should().Be(content);
-        
+
         var sentAt = capturedData.GetType().GetProperty("SentAt")?.GetValue(capturedData);
         sentAt.Should().NotBeNull();
     }
 
-    #endregion
-
-    #region TypingIndicator Tests
-
     [Fact]
-    public async Task TypingIndicator_ShouldNotifyOthersInGroup()
+    public async Task SendMessage_ShouldEmitAgentTypingTrue()
     {
         // Arrange
-        var conversationId = "conversation-123";
-        var isTyping = true;
+        var conversationId = Guid.NewGuid().ToString();
+        var content = "Test message";
+        var userId = Guid.Parse(TestUserId);
 
-        string? capturedMethod = null;
-        object?[]? capturedArgs = null;
+        var message = new Message(Guid.Parse(conversationId), userId, content, MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(It.IsAny<Guid>(), userId, content, MessageRole.User, default))
+            .ReturnsAsync(message);
+
+        var sendAsyncCalls = new List<(string method, object?[] args)>();
         _clientProxyMock
             .Setup(x => x.SendCoreAsync(
                 It.IsAny<string>(),
                 It.IsAny<object?[]>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, object?[], CancellationToken>((m, a, ct) => { capturedMethod = m; capturedArgs = a; })
+            .Callback<string, object?[], CancellationToken>((method, args, ct) =>
+            {
+                sendAsyncCalls.Add((method, args!));
+            })
             .Returns(Task.CompletedTask);
 
         // Act
-        await _chatHub.TypingIndicator(conversationId, isTyping);
+        await _chatHub.SendMessage(conversationId, content);
 
-        // Assert
-        _clientsMock.Verify(
-            x => x.OthersInGroup(conversationId),
+        // Assert: Verify AgentTyping was sent with true
+        var agentTypingCall = sendAsyncCalls.FirstOrDefault(c => c.method == "AgentTyping");
+        agentTypingCall.Should().NotBe(default);
+        agentTypingCall.args.Should().HaveCount(1);
+        agentTypingCall.args[0].Should().Be(true);
+
+        // Verify MessageSentEvent was published
+        _publishEndpointMock.Verify(
+            p => p.Publish(
+                It.Is<MessageSentEvent>(e =>
+                    e.ConversationId == Guid.Parse(conversationId) &&
+                    e.UserId == userId &&
+                    e.Content == content),
+                default),
             Times.Once);
+    }
 
-        _clientProxyMock.Verify(
-            x => x.SendCoreAsync(
-                "UserTyping",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()),
+    [Fact]
+    public async Task SendMessage_ShouldPublishMessageSentEvent()
+    {
+        // Arrange
+        var conversationId = Guid.NewGuid().ToString();
+        var content = "Test message";
+        var userId = Guid.Parse(TestUserId);
+
+        var message = new Message(Guid.Parse(conversationId), userId, content, MessageRole.User);
+
+        _conversationServiceMock
+            .Setup(s => s.AddMessageAsync(It.IsAny<Guid>(), userId, content, MessageRole.User, default))
+            .ReturnsAsync(message);
+
+        // Act
+        await _chatHub.SendMessage(conversationId, content);
+
+        // Assert
+        _publishEndpointMock.Verify(
+            p => p.Publish(
+                It.Is<MessageSentEvent>(e =>
+                    e.ConversationId == Guid.Parse(conversationId) &&
+                    e.MessageId == message.Id &&
+                    e.UserId == userId &&
+                    e.Content == content &&
+                    e.Role == "User"),
+                default),
             Times.Once);
-
-        capturedMethod.Should().Be("UserTyping");
-        capturedArgs.Should().NotBeNull();
-        capturedArgs!.Length.Should().Be(2);
-        capturedArgs[0]!.ToString().Should().Be(TestUserId);
-        ((bool)capturedArgs[1]!).Should().Be(isTyping);
-    }
-
-    [Fact]
-    public async Task TypingIndicator_WithFalse_ShouldSendCorrectStatus()
-    {
-        // Arrange
-        var conversationId = "conversation-123";
-        var isTyping = false;
-
-        object?[]? capturedArgs = null;
-        _clientProxyMock
-            .Setup(x => x.SendCoreAsync(
-                It.IsAny<string>(),
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<string, object?[], CancellationToken>((m, a, ct) => { capturedArgs = a; })
-            .Returns(Task.CompletedTask);
-
-        // Act
-        await _chatHub.TypingIndicator(conversationId, isTyping);
-
-        // Assert
-        _clientProxyMock.Verify(
-            x => x.SendCoreAsync(
-                "UserTyping",
-                It.IsAny<object?[]>(),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-
-        capturedArgs.Should().NotBeNull();
-        capturedArgs!.Length.Should().Be(2);
-        capturedArgs[0]!.ToString().Should().Be(TestUserId);
-        ((bool)capturedArgs[1]!).Should().BeFalse();
-    }
-
-    #endregion
-
-    #region GetUserOnlineStatus Tests
-
-    [Fact]
-    public async Task GetUserOnlineStatus_ShouldCallPresenceService()
-    {
-        // Arrange
-        var userId = "other-user-123";
-        _presenceServiceMock
-            .Setup(x => x.IsUserOnlineAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        // Act
-        var result = await _chatHub.GetUserOnlineStatus(userId);
-
-        // Assert
-        _presenceServiceMock.Verify(
-            x => x.IsUserOnlineAsync(userId, It.IsAny<CancellationToken>()),
-            Times.Once);
-        result.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task GetUserOnlineStatus_WhenUserOffline_ShouldReturnFalse()
-    {
-        // Arrange
-        var userId = "other-user-123";
-        _presenceServiceMock
-            .Setup(x => x.IsUserOnlineAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        // Act
-        var result = await _chatHub.GetUserOnlineStatus(userId);
-
-        // Assert
-        result.Should().BeFalse();
-    }
-
-    #endregion
-
-    #region GetOnlineUsers Tests
-
-    [Fact]
-    public async Task GetOnlineUsers_ShouldCallPresenceService()
-    {
-        // Arrange
-        var onlineUsers = new List<string> { "user1", "user2", "user3" };
-        _presenceServiceMock
-            .Setup(x => x.GetOnlineUsersAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(onlineUsers);
-
-        // Act
-        var result = await _chatHub.GetOnlineUsers();
-
-        // Assert
-        _presenceServiceMock.Verify(
-            x => x.GetOnlineUsersAsync(It.IsAny<CancellationToken>()),
-            Times.Once);
-        result.Should().BeEquivalentTo(onlineUsers);
-    }
-
-    [Fact]
-    public async Task GetOnlineUsers_WhenEmpty_ShouldReturnEmptyList()
-    {
-        // Arrange
-        _presenceServiceMock
-            .Setup(x => x.GetOnlineUsersAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<string>());
-
-        // Act
-        var result = await _chatHub.GetOnlineUsers();
-
-        // Assert
-        result.Should().BeEmpty();
-    }
-
-    #endregion
-
-    #region GetUserLastSeen Tests
-
-    [Fact]
-    public async Task GetUserLastSeen_ShouldCallPresenceService()
-    {
-        // Arrange
-        var userId = "other-user-123";
-        var lastSeen = DateTime.UtcNow.AddMinutes(-5);
-        _presenceServiceMock
-            .Setup(x => x.GetLastSeenAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(lastSeen);
-
-        // Act
-        var result = await _chatHub.GetUserLastSeen(userId);
-
-        // Assert
-        _presenceServiceMock.Verify(
-            x => x.GetLastSeenAsync(userId, It.IsAny<CancellationToken>()),
-            Times.Once);
-        result.Should().Be(lastSeen);
-    }
-
-    [Fact]
-    public async Task GetUserLastSeen_WhenNeverSeen_ShouldReturnNull()
-    {
-        // Arrange
-        var userId = "new-user-123";
-        _presenceServiceMock
-            .Setup(x => x.GetLastSeenAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((DateTime?)null);
-
-        // Act
-        var result = await _chatHub.GetUserLastSeen(userId);
-
-        // Assert
-        result.Should().BeNull();
     }
 
     #endregion

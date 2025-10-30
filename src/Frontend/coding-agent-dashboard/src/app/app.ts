@@ -34,6 +34,10 @@ export class App {
   // Authentication state
   protected readonly isAuthenticated = computed(() => this.authService.isAuthenticated());
   protected readonly currentUser = this.authService.currentUser;
+  protected readonly isAdmin = computed(() => {
+    const user = this.authService.currentUser();
+    return user?.roles?.includes('Admin') ?? false;
+  });
 
   toggleSidenav(): void {
     this.sidenavOpened.update(value => !value);

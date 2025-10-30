@@ -157,11 +157,11 @@ export class SignalRService {
     await this.invoke('LeaveConversation', conversationId);
   }
 
+  /**
+   * Send a message to the AI agent in a conversation.
+   * The backend will publish an event for the Orchestration service to process.
+   */
   public async sendMessage(conversationId: string, content: string): Promise<void> {
     await this.invoke('SendMessage', conversationId, content);
-  }
-
-  public async typingIndicator(conversationId: string, isTyping: boolean): Promise<void> {
-    await this.invoke('TypingIndicator', conversationId, isTyping);
   }
 }

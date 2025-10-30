@@ -1,10 +1,11 @@
 using CodingAgent.Services.Chat.Api.Endpoints;
 using CodingAgent.Services.Chat.Api.Hubs;
+using CodingAgent.Services.Chat.Application.EventHandlers;
+using CodingAgent.Services.Chat.Application.Services;
 using CodingAgent.Services.Chat.Domain.Repositories;
 using CodingAgent.Services.Chat.Domain.Services;
 using CodingAgent.Services.Chat.Infrastructure.Caching;
 using CodingAgent.Services.Chat.Infrastructure.Persistence;
-using CodingAgent.Services.Chat.Infrastructure.Presence;
 using CodingAgent.Services.Chat.Infrastructure.Storage;
 using CodingAgent.SharedKernel.Infrastructure;
 using FluentValidation;
@@ -73,14 +74,8 @@ builder.Services.AddScoped<IMessageCacheService>(sp =>
     return new MessageCacheService(redis, logger, meterFactory);
 });
 
-// Register presence service (accepts null connection when Redis is not configured)
-builder.Services.AddScoped<IPresenceService>(sp =>
-{
-    var redis = sp.GetService<IConnectionMultiplexer>();
-    var logger = sp.GetRequiredService<ILogger<PresenceService>>();
-    var meterFactory = sp.GetRequiredService<IMeterFactory>();
-    return new PresenceService(redis, logger, meterFactory);
-});
+// Register conversation service
+builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // File storage service
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
@@ -153,7 +148,13 @@ if (!string.IsNullOrEmpty(jwtSecret))
         };
     });
 
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        // Restrict service-to-service endpoints to the Orchestration Service identity
+        // Tokens calling these endpoints must include role "orchestration"
+        options.AddPolicy("OrchestrationService", policy =>
+            policy.RequireRole("orchestration"));
+    });
 }
 else
 {
@@ -174,11 +175,21 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
+    
+    // Register consumers
+    x.AddConsumer<AgentResponseEventConsumer>();
     x.AddConsumers(typeof(Program).Assembly);
 
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.ConfigureRabbitMQHost(builder.Configuration, builder.Environment);
+        
+        // Configure consumer endpoint for agent responses
+        cfg.ReceiveEndpoint("chat-agent-responses", e =>
+        {
+            e.ConfigureConsumer<AgentResponseEventConsumer>(context);
+        });
+        
         cfg.ConfigureEndpoints(context);
     });
 });
@@ -257,8 +268,8 @@ app.MapGet("/ping", () => Results.Ok(new { status = "healthy", service = "chat-s
 app.MapConversationEndpoints();
 app.MapAttachmentEndpoints();
 app.MapFileEndpoints();
-app.MapPresenceEndpoints();
 app.MapEventTestEndpoints();
+app.MapAgentEndpoints();
 
 // SignalR hub
 app.MapHub<ChatHub>("/hubs/chat");

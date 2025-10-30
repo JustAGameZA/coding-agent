@@ -30,5 +30,10 @@ export const routes: Routes = [
     path: 'tasks',
     loadComponent: () => import('./features/tasks/tasks.component').then(m => m.TasksComponent),
     canActivate: [authGuard]
+  },
+  {
+    path: 'admin',
+    loadChildren: () => import('./features/admin/admin.routes').then(m => m.adminRoutes),
+    canActivate: [authGuard]
   }
 ];

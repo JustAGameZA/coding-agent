@@ -33,8 +33,8 @@
     #sidenav 
     mode="side" 
     [opened]="sidenavOpened() && isAuthenticated()"
-    class="app-sidenav"
-    *ngIf="isAuthenticated()">
+    [style.display]="isAuthenticated() ? 'block' : 'none'"
+    class="app-sidenav">
     <mat-nav-list>
       <a mat-list-item routerLink="/dashboard" routerLinkActive="active">
         <mat-icon matListItemIcon>dashboard</mat-icon>
@@ -47,6 +47,10 @@
       <a mat-list-item routerLink="/tasks" routerLinkActive="active">
         <mat-icon matListItemIcon>task</mat-icon>
         <span matListItemTitle>Tasks</span>
+      </a>
+      <a mat-list-item routerLink="/admin/infrastructure" routerLinkActive="active" *ngIf="isAdmin()">
+        <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
+        <span matListItemTitle>Admin</span>
       </a>
     </mat-nav-list>
   </mat-sidenav>

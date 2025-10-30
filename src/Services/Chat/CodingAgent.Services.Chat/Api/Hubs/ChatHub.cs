@@ -1,7 +1,11 @@
+using CodingAgent.Services.Chat.Api.Extensions;
+using CodingAgent.Services.Chat.Domain.Entities;
 using CodingAgent.Services.Chat.Domain.Services;
+using CodingAgent.SharedKernel.Domain.Events;
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using System.Security.Claims;
+using System.Diagnostics;
 
 namespace CodingAgent.Services.Chat.Api.Hubs;
 
@@ -12,62 +16,18 @@ namespace CodingAgent.Services.Chat.Api.Hubs;
 [Authorize]
 public class ChatHub : Hub
 {
+    private readonly IConversationService _conversationService;
+    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<ChatHub> _logger;
-    private readonly IPresenceService _presenceService;
 
-    public ChatHub(ILogger<ChatHub> logger, IPresenceService presenceService)
+    public ChatHub(
+        IConversationService conversationService,
+        IPublishEndpoint publishEndpoint,
+        ILogger<ChatHub> logger)
     {
+        _conversationService = conversationService;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
-        _presenceService = presenceService;
-    }
-
-    /// <summary>
-    /// Gets the authenticated user ID from the JWT token claims.
-    /// </summary>
-    private string UserId => Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-        ?? Context.User?.FindFirst("sub")?.Value
-        ?? "anonymous";
-
-    public override async Task OnConnectedAsync()
-    {
-        // Mark user as online
-        await _presenceService.SetUserOnlineAsync(UserId, Context.ConnectionId);
-        
-        // Broadcast presence change to all clients
-        await Clients.All.SendAsync("UserPresenceChanged", new
-        {
-            userId = UserId,
-            isOnline = true,
-            lastSeenUtc = (DateTime?)null
-        });
-        
-        _logger.LogInformation("User {UserId} connected to chat hub with connection {ConnectionId}",
-            UserId, Context.ConnectionId);
-        
-        await base.OnConnectedAsync();
-    }
-
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        // Mark user as offline
-        await _presenceService.SetUserOfflineAsync(UserId, Context.ConnectionId);
-        
-        // Only broadcast if user is fully offline (no other connections)
-        var isStillOnline = await _presenceService.IsUserOnlineAsync(UserId);
-        if (!isStillOnline)
-        {
-            await Clients.All.SendAsync("UserPresenceChanged", new
-            {
-                userId = UserId,
-                isOnline = false,
-                lastSeenUtc = DateTime.UtcNow
-            });
-        }
-        
-        _logger.LogInformation("User {UserId} disconnected from chat hub with connection {ConnectionId}",
-            UserId, Context.ConnectionId);
-        
-        await base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>
@@ -75,13 +35,9 @@ public class ChatHub : Hub
     /// </summary>
     public async Task JoinConversation(string conversationId)
     {
-        // TODO: Validate user has access to this conversation (check ownership/permissions)
         await Groups.AddToGroupAsync(Context.ConnectionId, conversationId);
         _logger.LogInformation(
-            "User {UserId} (connection {ConnectionId}) joined conversation {ConversationId}",
-            UserId,
-            Context.ConnectionId,
-            conversationId);
+            $"User {Context.User?.GetUserId()} with connection {Context.ConnectionId} joined conversation {conversationId}");
     }
 
     /// <summary>
@@ -91,66 +47,59 @@ public class ChatHub : Hub
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId);
         _logger.LogInformation(
-            "User {UserId} (connection {ConnectionId}) left conversation {ConversationId}",
-            UserId,
-            Context.ConnectionId,
-            conversationId);
+            $"User {Context.User?.GetUserId()} with connection {Context.ConnectionId} left conversation {conversationId}");
     }
 
     /// <summary>
-    /// Sends a message to all users in a conversation.
+    /// Sends a message to the conversation and triggers AI agent processing.
     /// </summary>
     public async Task SendMessage(string conversationId, string content)
     {
-        // TODO: Persist message to database via ConversationService
-        // TODO: Validate user has access to this conversation
-        
+        using var activity = Activity.Current?.Source.StartActivity("ChatHub.SendMessage");
+        activity?.SetTag("conversation.id", conversationId);
+        activity?.SetTag("content.length", content.Length);
+
+        var userId = Context.User!.GetUserId();
+        var conversationGuid = Guid.Parse(conversationId);
+
+        // 1. Persist user message
+        var message = await _conversationService.AddMessageAsync(
+            conversationGuid,
+            userId,
+            content,
+            MessageRole.User);
+
         _logger.LogInformation(
-            "User {UserId} sent message to conversation {ConversationId}",
-            UserId,
+            "User {UserId} sent message {MessageId} to conversation {ConversationId}",
+            userId,
+            message.Id,
             conversationId);
-        
-        // Broadcast to all clients in the conversation group
+
+        // 2. Echo message back to user (optimistic UI)
         await Clients.Group(conversationId).SendAsync("ReceiveMessage", new
         {
-            UserId,
-            ConversationId = conversationId,
+            Id = message.Id,
+            ConversationId = conversationGuid,
+            UserId = userId,
             Content = content,
-            SentAt = DateTime.UtcNow
+            Role = "User",
+            SentAt = message.SentAt
         });
-    }
 
-    /// <summary>
-    /// Broadcasts typing indicator to other users in the conversation.
-    /// </summary>
-    public async Task TypingIndicator(string conversationId, bool isTyping)
-    {
-        await Clients.OthersInGroup(conversationId).SendAsync("UserTyping",
-            UserId,
-            isTyping);
-    }
+        // 3. Show "agent typing" indicator
+        await Clients.Group(conversationId).SendAsync("AgentTyping", true);
 
-    /// <summary>
-    /// Get online status for a specific user.
-    /// </summary>
-    public async Task<bool> GetUserOnlineStatus(string userId)
-    {
-        return await _presenceService.IsUserOnlineAsync(userId);
-    }
+        // 4. Publish event for Orchestration Service
+        await _publishEndpoint.Publish(new MessageSentEvent
+        {
+            ConversationId = conversationGuid,
+            MessageId = message.Id,
+            UserId = userId,
+            Content = content,
+            Role = "User",
+            SentAt = message.SentAt
+        });
 
-    /// <summary>
-    /// Get all currently online users.
-    /// </summary>
-    public async Task<IEnumerable<string>> GetOnlineUsers()
-    {
-        return await _presenceService.GetOnlineUsersAsync();
-    }
-
-    /// <summary>
-    /// Get last seen timestamp for a user.
-    /// </summary>
-    public async Task<DateTime?> GetUserLastSeen(string userId)
-    {
-        return await _presenceService.GetLastSeenAsync(userId);
+        activity?.SetTag("message.id", message.Id);
     }
 }

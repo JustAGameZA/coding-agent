@@ -1,7 +1,7 @@
 <todos title="Chat UI E2E Stabilization" rule="Review steps frequently throughout the conversation and DO NOT stop between steps unless they explicitly require it.">
 - [x] stabilize-chat-ui-e2e: Stabilize Playwright UI test by waiting for conversations API response and the rendered navigation list instead of a fixed timeout. 🔴
-  _UI test flakiness caused by waiting on container element `[data-testid=\"conversation-list\"]` which exists before data load; updated test to wait for `/api/chat/conversations` response and `[data-testid=\"conversation-nav-list\"]` visibility with longer timeout._
-- [ ] add-chat-ready-signal: Optionally add a deterministic `data-testid="chat-ready"` in ChatComponent when SignalR connected and conversations loaded; adjust tests to use it. 🟢
+  _UI test flakiness caused by waiting on container element `[data-testid="conversation-list"]` which exists before data load; updated test to wait for `/api/chat/conversations` response and `[data-testid="conversation-nav-list"]` visibility with longer timeout._
+- [x] add-chat-ready-signal: Optionally add a deterministic `data-testid="chat-ready"` in ChatComponent when SignalR connected and conversations loaded; adjust tests to use it. 🟡
   _Provides a deterministic readiness signal for future cross-browser E2E stability; not strictly required after nav-list wait fix._
 </todos>
 
