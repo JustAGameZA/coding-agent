@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodingAgent.Services.Auth",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodingAgent.Services.Auth.Tests", "src\Services\Auth\CodingAgent.Services.Auth.Tests\CodingAgent.Services.Auth.Tests.csproj", "{96E83E9A-A624-43CE-A72A-B97120C467A6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodingAgent.Gateway.Tests", "src\Gateway\CodingAgent.Gateway.Tests\CodingAgent.Gateway.Tests.csproj", "{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -263,6 +265,18 @@ Global
 		{96E83E9A-A624-43CE-A72A-B97120C467A6}.Release|x64.Build.0 = Release|Any CPU
 		{96E83E9A-A624-43CE-A72A-B97120C467A6}.Release|x86.ActiveCfg = Release|Any CPU
 		{96E83E9A-A624-43CE-A72A-B97120C467A6}.Release|x86.Build.0 = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|x64.Build.0 = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Debug|x86.Build.0 = Debug|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|x64.ActiveCfg = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|x64.Build.0 = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|x86.ActiveCfg = Release|Any CPU
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -295,5 +309,6 @@ Global
 		{FE3FB199-55FF-42D1-1FD0-08473B5A7350} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 		{D7D8EF7A-BF69-4515-B1C3-C3F47F5BF545} = {FE3FB199-55FF-42D1-1FD0-08473B5A7350}
 		{96E83E9A-A624-43CE-A72A-B97120C467A6} = {FE3FB199-55FF-42D1-1FD0-08473B5A7350}
+		{9D74FD32-9D7C-4CA9-A17D-5E682EE392F3} = {6306A8FB-679E-111F-6585-8F70E0EE6013}
 	EndGlobalSection
 EndGlobal

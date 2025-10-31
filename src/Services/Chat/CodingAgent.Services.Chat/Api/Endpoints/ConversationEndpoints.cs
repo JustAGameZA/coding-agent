@@ -193,18 +193,15 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            try
-            {
-                return Results.ValidationProblem(validationResult.ToDictionary());
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error converting validation result to dictionary");
-                var errors = validationResult.Errors
-                    .GroupBy(e => e.PropertyName ?? "General")
-                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
-                return Results.ValidationProblem(errors);
-            }
+            // Convert validation errors to dictionary format expected by Results.ValidationProblem
+            var errors = validationResult.Errors
+                .GroupBy(e => e.PropertyName ?? "General")
+                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+            
+            logger.LogWarning("Validation failed for CreateConversation: {Errors}", 
+                string.Join(", ", errors.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key}: {v}"))));
+            
+            return Results.ValidationProblem(errors);
         }
 
         logger.LogInformation("Creating conversation: {Title}", request.Title);
@@ -263,18 +260,15 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            try
-            {
-                return Results.ValidationProblem(validationResult.ToDictionary());
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error converting validation result to dictionary");
-                var errors = validationResult.Errors
-                    .GroupBy(e => e.PropertyName ?? "General")
-                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
-                return Results.ValidationProblem(errors);
-            }
+            // Convert validation errors to dictionary format expected by Results.ValidationProblem
+            var errors = validationResult.Errors
+                .GroupBy(e => e.PropertyName ?? "General")
+                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+            
+            logger.LogWarning("Validation failed for CreateConversation: {Errors}", 
+                string.Join(", ", errors.SelectMany(kvp => kvp.Value.Select(v => $"{kvp.Key}: {v}"))));
+            
+            return Results.ValidationProblem(errors);
         }
 
         logger.LogInformation("Updating conversation {ConversationId}: {Title}", conversationId, request.Title);

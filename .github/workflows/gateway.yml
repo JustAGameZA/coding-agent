@@ -59,6 +59,7 @@ jobs:
           dotnet test CodingAgent.sln -c Release --no-build --no-restore
           --settings ./.runsettings --filter "Category=Unit"
           --logger "trx;LogFileName=test_results.trx"
+        continue-on-error: false
 
       - name: Conditional Docker build
         run: |
