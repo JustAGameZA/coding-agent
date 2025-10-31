@@ -1,7 +1,9 @@
 using CodingAgent.Gateway.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CodingAgent.Gateway.Tests.Unit.Services;
@@ -9,13 +11,17 @@ namespace CodingAgent.Gateway.Tests.Unit.Services;
 [Trait("Category", "Unit")]
 public class DualWriteServiceTests
 {
-    private readonly Mock<ILogger<DualWriteService>> _loggerMock;
-    private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
+    private readonly ILogger<DualWriteService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public DualWriteServiceTests()
     {
-        _loggerMock = new Mock<ILogger<DualWriteService>>();
-        _httpClientFactoryMock = new Mock<IHttpClientFactory>();
+        _logger = NullLogger<DualWriteService>.Instance;
+        var services = new ServiceCollection();
+        services.AddHttpClient("new-system");
+        services.AddHttpClient("legacy-system");
+        var serviceProvider = services.BuildServiceProvider();
+        _httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
     }
 
     [Fact]
@@ -29,10 +35,10 @@ public class DualWriteServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new DualWriteService(testConfig, _loggerMock.Object, _httpClientFactoryMock.Object);
+        var service = new DualWriteService(testConfig, _logger, _httpClientFactory);
 
         // Act
-        var result = serviceWithConfig.IsDualWriteEnabled("Chat");
+        var result = service.IsDualWriteEnabled("Chat");
 
         // Assert
         Assert.True(result);
@@ -49,10 +55,10 @@ public class DualWriteServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new DualWriteService(testConfig, _loggerMock.Object, _httpClientFactoryMock.Object);
+        var service = new DualWriteService(testConfig, _logger, _httpClientFactory);
 
         // Act
-        var result = serviceWithConfig.IsDualWriteEnabled("Chat");
+        var result = service.IsDualWriteEnabled("Chat");
 
         // Assert
         Assert.False(result);
@@ -64,12 +70,57 @@ public class DualWriteServiceTests
         // Arrange - Empty config should default to false
         var configBuilder = new ConfigurationBuilder();
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new DualWriteService(testConfig, _loggerMock.Object, _httpClientFactoryMock.Object);
+        var service = new DualWriteService(testConfig, _logger, _httpClientFactory);
 
         // Act
-        var result = serviceWithConfig.IsDualWriteEnabled("unknown");
+        var result = service.IsDualWriteEnabled("unknown");
 
         // Assert
         Assert.False(result);
+    }
+
+    [Fact]
+    public void IsDualWriteEnabled_WhenInvalidValue_ShouldReturnFalse()
+    {
+        // Arrange - Invalid value should return false
+        var inMemoryConfig = new Dictionary<string, string?>
+        {
+            ["DualWrite:Chat:Enabled"] = "invalid"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        configBuilder.AddInMemoryCollection(inMemoryConfig);
+        var testConfig = configBuilder.Build();
+        var service = new DualWriteService(testConfig, _logger, _httpClientFactory);
+
+        // Act
+        var result = service.IsDualWriteEnabled("Chat");
+
+        // Assert
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task ExecuteDualWriteAsync_WhenDisabled_ShouldOnlyWriteToNewSystem()
+    {
+        // Arrange
+        var inMemoryConfig = new Dictionary<string, string?>
+        {
+            ["DualWrite:Chat:Enabled"] = "false"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        configBuilder.AddInMemoryCollection(inMemoryConfig);
+        var testConfig = configBuilder.Build();
+        var service = new DualWriteService(testConfig, _logger, _httpClientFactory);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://test.example.com/api/test");
+
+        // Act
+        var result = await service.ExecuteDualWriteAsync("Chat", request);
+
+        // Assert
+        Assert.True(result.NewSystemWritten);
+        Assert.False(result.LegacySystemWritten);
+        Assert.Null(result.NewSystemStatusCode);
+        Assert.Null(result.LegacySystemStatusCode);
     }
 }

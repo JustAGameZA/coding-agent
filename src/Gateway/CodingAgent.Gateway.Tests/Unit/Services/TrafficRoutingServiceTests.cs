@@ -1,7 +1,7 @@
 using CodingAgent.Gateway.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CodingAgent.Gateway.Tests.Unit.Services;
@@ -9,11 +9,11 @@ namespace CodingAgent.Gateway.Tests.Unit.Services;
 [Trait("Category", "Unit")]
 public class TrafficRoutingServiceTests
 {
-    private readonly Mock<ILogger<TrafficRoutingService>> _loggerMock;
+    private readonly ILogger<TrafficRoutingService> _logger;
 
     public TrafficRoutingServiceTests()
     {
-        _loggerMock = new Mock<ILogger<TrafficRoutingService>>();
+        _logger = NullLogger<TrafficRoutingService>.Instance;
     }
 
     [Fact]
@@ -27,10 +27,10 @@ public class TrafficRoutingServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act
-        var result = serviceWithConfig.ShouldRouteToNewService("chat");
+        var result = service.ShouldRouteToNewService("chat");
 
         // Assert
         Assert.True(result);
@@ -47,10 +47,10 @@ public class TrafficRoutingServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act
-        var result = serviceWithConfig.ShouldRouteToNewService("chat");
+        var result = service.ShouldRouteToNewService("chat");
 
         // Assert
         Assert.False(result);
@@ -68,10 +68,10 @@ public class TrafficRoutingServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act
-        var result = serviceWithConfig.ShouldRouteToNewService("chat", "test-correlation-id");
+        var result = service.ShouldRouteToNewService("chat", "test-correlation-id");
 
         // Assert
         Assert.True(result);
@@ -89,15 +89,51 @@ public class TrafficRoutingServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act - Same correlation ID should route to same destination
         var correlationId = "test-123";
-        var result1 = serviceWithConfig.ShouldRouteToNewService("chat", correlationId);
-        var result2 = serviceWithConfig.ShouldRouteToNewService("chat", correlationId);
+        var result1 = service.ShouldRouteToNewService("chat", correlationId);
+        var result2 = service.ShouldRouteToNewService("chat", correlationId);
 
         // Assert - Deterministic routing
         Assert.Equal(result1, result2);
+    }
+
+    [Fact]
+    public void ShouldRouteToNewService_WhenPercentageIs0_ShouldReturnFalse()
+    {
+        // Arrange
+        var inMemoryConfig = new Dictionary<string, string?>
+        {
+            ["Features:UseLegacyChat"] = "false",
+            ["TrafficRouting:chat:Percentage"] = "0"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        configBuilder.AddInMemoryCollection(inMemoryConfig);
+        var testConfig = configBuilder.Build();
+        var service = new TrafficRoutingService(testConfig, _logger);
+
+        // Act
+        var result = service.ShouldRouteToNewService("chat", "test-correlation-id");
+
+        // Assert
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldRouteToNewService_WhenUnknownService_ShouldReturnTrue()
+    {
+        // Arrange - Unknown service should default to new system
+        var configBuilder = new ConfigurationBuilder();
+        var testConfig = configBuilder.Build();
+        var service = new TrafficRoutingService(testConfig, _logger);
+
+        // Act
+        var result = service.ShouldRouteToNewService("unknown-service");
+
+        // Assert
+        Assert.True(result);
     }
 
     [Fact]
@@ -111,10 +147,10 @@ public class TrafficRoutingServiceTests
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddInMemoryCollection(inMemoryConfig);
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act
-        var result = serviceWithConfig.GetTrafficPercentage("Chat");
+        var result = service.GetTrafficPercentage("Chat");
 
         // Assert
         Assert.Equal(75, result);
@@ -126,10 +162,30 @@ public class TrafficRoutingServiceTests
         // Arrange - Empty config should default to 100
         var configBuilder = new ConfigurationBuilder();
         var testConfig = configBuilder.Build();
-        var serviceWithConfig = new TrafficRoutingService(testConfig, _loggerMock.Object);
+        var service = new TrafficRoutingService(testConfig, _logger);
 
         // Act
-        var result = serviceWithConfig.GetTrafficPercentage("unknown");
+        var result = service.GetTrafficPercentage("unknown");
+
+        // Assert
+        Assert.Equal(100, result);
+    }
+
+    [Fact]
+    public void GetTrafficPercentage_WhenInvalidValue_ShouldReturn100()
+    {
+        // Arrange - Invalid value should default to 100
+        var inMemoryConfig = new Dictionary<string, string?>
+        {
+            ["TrafficRouting:Chat:Percentage"] = "invalid"
+        };
+        var configBuilder = new ConfigurationBuilder();
+        configBuilder.AddInMemoryCollection(inMemoryConfig);
+        var testConfig = configBuilder.Build();
+        var service = new TrafficRoutingService(testConfig, _logger);
+
+        // Act
+        var result = service.GetTrafficPercentage("Chat");
 
         // Assert
         Assert.Equal(100, result);
