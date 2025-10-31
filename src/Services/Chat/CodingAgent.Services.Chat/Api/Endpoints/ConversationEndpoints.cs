@@ -2,6 +2,7 @@ using CodingAgent.Services.Chat.Domain.Entities;
 using CodingAgent.Services.Chat.Domain.Repositories;
 using CodingAgent.SharedKernel.Results;
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -38,7 +39,7 @@ public static class ConversationEndpoints
             .WithDescription("Create a new conversation with the specified title. Title must be between 1 and 200 characters.")
             .WithSummary("Create a new conversation")
             .Produces<ConversationDto>(StatusCodes.Status201Created)
-            .ProducesValidationProblem();
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest);
 
         group.MapPut("{id}", UpdateConversation)
             .WithName("UpdateConversation")
@@ -46,7 +47,7 @@ public static class ConversationEndpoints
             .WithSummary("Update conversation title")
             .Produces<ConversationDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
-            .ProducesValidationProblem();
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest);
 
         group.MapDelete("{id:guid}", DeleteConversation)
             .WithName("DeleteConversation")
@@ -192,11 +193,18 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            var errors = validationResult.Errors
-                .Where(e => !string.IsNullOrEmpty(e.PropertyName))
-                .GroupBy(e => e.PropertyName!)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
-            return Results.ValidationProblem(errors);
+            try
+            {
+                return Results.ValidationProblem(validationResult.ToDictionary());
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error converting validation result to dictionary");
+                var errors = validationResult.Errors
+                    .GroupBy(e => e.PropertyName ?? "General")
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+                return Results.ValidationProblem(errors);
+            }
         }
 
         logger.LogInformation("Creating conversation: {Title}", request.Title);
@@ -255,11 +263,18 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            var errors = validationResult.Errors
-                .Where(e => !string.IsNullOrEmpty(e.PropertyName))
-                .GroupBy(e => e.PropertyName!)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
-            return Results.ValidationProblem(errors);
+            try
+            {
+                return Results.ValidationProblem(validationResult.ToDictionary());
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error converting validation result to dictionary");
+                var errors = validationResult.Errors
+                    .GroupBy(e => e.PropertyName ?? "General")
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+                return Results.ValidationProblem(errors);
+            }
         }
 
         logger.LogInformation("Updating conversation {ConversationId}: {Title}", conversationId, request.Title);
