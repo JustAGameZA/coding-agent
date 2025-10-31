@@ -12,6 +12,8 @@ public class CreateConversationRequestValidator : AbstractValidator<Api.Endpoint
         RuleFor(x => x.Title)
             .NotEmpty()
             .WithMessage("Title is required")
+            .Must(s => !string.IsNullOrWhiteSpace(s))
+            .WithMessage("Title is required")
             .Length(1, 200)
             .WithMessage("Title must be between 1 and 200 characters");
     }

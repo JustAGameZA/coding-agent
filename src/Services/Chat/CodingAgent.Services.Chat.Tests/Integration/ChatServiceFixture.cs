@@ -4,6 +4,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Concurrent;
 using Xunit;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CodingAgent.Services.Chat.Tests.Integration;
 
@@ -12,6 +16,7 @@ public sealed class ChatServiceFixture : IAsyncLifetime
     private PostgreSqlContainer? _postgres;
     public HttpClient Client { get; private set; } = default!;
     public WebApplicationFactory<Program> Factory { get; private set; } = default!;
+    private readonly Guid _testUserId = Guid.NewGuid();
 
     public ChatServiceFixture() { }
 
@@ -38,6 +43,10 @@ public sealed class ChatServiceFixture : IAsyncLifetime
             connectionString = null;
         }
 
+        // Generate a test JWT secret for test authentication
+        var testJwtSecret = "TestSecretKeyForDevelopment12345678901234567890"; // Must be >= 32 chars
+        var testJwtToken = GenerateTestJwtToken(_testUserId, testJwtSecret);
+
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -46,18 +55,44 @@ public sealed class ChatServiceFixture : IAsyncLifetime
 
                 builder.ConfigureAppConfiguration((ctx, config) =>
                 {
+                    var dict = new Dictionary<string, string?>
+                    {
+                        ["Jwt:Secret"] = testJwtSecret,
+                        ["Jwt:Issuer"] = "CodingAgent",
+                        ["Jwt:Audience"] = "CodingAgent.API"
+                    };
                     if (!string.IsNullOrEmpty(connectionString))
                     {
-                        var dict = new Dictionary<string, string?>
-                        {
-                            ["ConnectionStrings:ChatDb"] = connectionString
-                        };
-                        config.AddInMemoryCollection(dict!);
+                        dict["ConnectionStrings:ChatDb"] = connectionString;
                     }
+                    config.AddInMemoryCollection(dict!);
                 });
             });
 
         Client = Factory.CreateClient();
+        // Add JWT token to all requests
+        Client.DefaultRequestHeaders.Authorization = 
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", testJwtToken);
+    }
+
+    private static string GenerateTestJwtToken(Guid userId, string secret)
+    {
+        var key = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        
+        var token = new JwtSecurityToken(
+            issuer: "CodingAgent",
+            audience: "CodingAgent.API",
+            claims: new[]
+            {
+                new Claim("sub", userId.ToString()),
+                new Claim("nameid", userId.ToString())
+            },
+            expires: DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     public async Task DisposeAsync()

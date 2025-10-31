@@ -4,6 +4,7 @@ using CodingAgent.SharedKernel.Results;
 using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace CodingAgent.Services.Chat.Api.Endpoints;
 
@@ -191,7 +192,11 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            return Results.ValidationProblem(validationResult.ToDictionary());
+            var errors = validationResult.Errors
+                .Where(e => !string.IsNullOrEmpty(e.PropertyName))
+                .GroupBy(e => e.PropertyName!)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+            return Results.ValidationProblem(errors);
         }
 
         logger.LogInformation("Creating conversation: {Title}", request.Title);
@@ -250,7 +255,11 @@ public static class ConversationEndpoints
         var validationResult = await validator.ValidateAsync(request, ct);
         if (!validationResult.IsValid)
         {
-            return Results.ValidationProblem(validationResult.ToDictionary());
+            var errors = validationResult.Errors
+                .Where(e => !string.IsNullOrEmpty(e.PropertyName))
+                .GroupBy(e => e.PropertyName!)
+                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage ?? "Validation error").ToArray());
+            return Results.ValidationProblem(errors);
         }
 
         logger.LogInformation("Updating conversation {ConversationId}: {Title}", conversationId, request.Title);
