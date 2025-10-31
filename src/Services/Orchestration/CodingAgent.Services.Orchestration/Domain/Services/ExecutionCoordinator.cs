@@ -22,6 +22,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
     private readonly IExecutionLogService _logService;
     private readonly ILogger<ExecutionCoordinator> _logger;
     private readonly ActivitySource _activitySource;
+    private readonly IReflectionService? _reflectionService; // Optional - reflection for agentic AI
 
     public ExecutionCoordinator(
         IStrategySelector strategySelector,
@@ -29,7 +30,8 @@ public class ExecutionCoordinator : IExecutionCoordinator
         IServiceScopeFactory scopeFactory,
         IExecutionLogService logService,
         ILogger<ExecutionCoordinator> logger,
-        ActivitySource activitySource)
+        ActivitySource activitySource,
+        IReflectionService? reflectionService = null)
     {
         _strategySelector = strategySelector ?? throw new ArgumentNullException(nameof(strategySelector));
         _strategies = strategies ?? throw new ArgumentNullException(nameof(strategies));
@@ -37,6 +39,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
         _logService = logService ?? throw new ArgumentNullException(nameof(logService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
+        _reflectionService = reflectionService;
     }
 
     public async Task<TaskExecution> QueueExecutionAsync(CodingTask task, string? overrideStrategyName, CancellationToken cancellationToken = default)
@@ -94,7 +97,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
             var execution = await executionRepository.GetByIdAsync(executionId, ct) 
                 ?? throw new InvalidOperationException("Execution not found");
 
-            if (result.Success)
+            if (result.Success || result.HasPartialSuccess)
             {
                 execution.Complete(result.TotalTokensUsed, result.TotalCostUSD, result.Duration);
                 await executionRepository.UpdateAsync(execution, ct);
@@ -108,6 +111,41 @@ public class ExecutionCoordinator : IExecutionCoordinator
                     ct);
 
                 await _logService.WriteAsync(executionId, $"status:success tokens={result.TotalTokensUsed} cost={result.TotalCostUSD:F4} durationMs={result.Duration.TotalMilliseconds:F0}", ct);
+
+                // Agentic AI: Reflect on execution if reflection service is available
+                if (_reflectionService != null)
+                {
+                    try
+                    {
+                        var outcome = new ExecutionOutcome
+                        {
+                            Success = result.Success,
+                            HasPartialSuccess = result.HasPartialSuccess,
+                            Duration = result.Duration,
+                            TokensUsed = result.TotalTokensUsed,
+                            Errors = result.Errors ?? new List<string>(),
+                            Results = new Dictionary<string, object>
+                            {
+                                ["changes"] = result.Changes?.Count ?? 0,
+                                ["strategy"] = strategyName
+                            }
+                        };
+
+                        var reflection = await _reflectionService.ReflectOnExecutionAsync(executionId, outcome, ct);
+                        
+                        // If reflection suggests improvements, generate plan
+                        if (reflection.ConfidenceScore < 0.7 || reflection.ImprovementSuggestions.Any())
+                        {
+                            var improvementPlan = await _reflectionService.GenerateImprovementPlanAsync(reflection, ct);
+                            _logger.LogInformation("Generated improvement plan for execution {ExecutionId} with {StepCount} steps", 
+                                executionId, improvementPlan.Steps.Count);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Reflection failed for execution {ExecutionId}", executionId);
+                    }
+                }
             }
             else
             {
