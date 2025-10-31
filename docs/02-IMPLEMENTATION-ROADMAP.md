@@ -827,11 +827,12 @@ Migrate data from old system and route production traffic to new system.
 ### Week 23: Data Migration
 
 **Days 1-2: Migration Scripts**
-- [ ] Write PostgreSQL migration (old DB → new schemas)
-- [ ] Migrate users (1:1 mapping)
-- [ ] Migrate conversations (Chat service schema)
-- [ ] Migrate tasks (Orchestration service schema)
-- **Deliverable**: Migration scripts tested on staging
+- [x] Write PostgreSQL migration (old DB → new schemas) ✅
+- [x] Migrate users (1:1 mapping) ✅
+- [x] Migrate conversations (Chat service schema) ✅
+- [x] Migrate tasks (Orchestration service schema) ✅
+- **Deliverable**: Migration scripts tested on staging ✅ (PR #174)
+- **Note**: Migration scripts in `deployment/docker-compose/migrations/` with runner script `migrate.ps1`
 
 **Days 3-5: Dual-Write Period**
 - [ ] Enable dual-writes (write to both old and new DBs)
@@ -842,10 +843,12 @@ Migrate data from old system and route production traffic to new system.
 ### Week 24: Traffic Cutover
 
 **Days 1-2: Feature Flags**
-- [ ] Add feature flags in Gateway (`UseLegacyChat`, `UseLegacyOrchestration`)
+- [x] Add feature flags in Gateway (`UseLegacyChat`, `UseLegacyOrchestration`) ✅
 - [ ] Route 10% of traffic to new services
 - [ ] Monitor error rates and latency
 - **Deliverable**: Partial traffic routing working
+- **Note**: Feature flags configured and headers exposed for observability (PR #174)
+- **Documentation**: See `docs/FEATURE-FLAGS.md` and `docs/runbooks/migration-cutover.md`
 
 **Days 3-4: Full Cutover**
 - [ ] Route 100% traffic to new services
