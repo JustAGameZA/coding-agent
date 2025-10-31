@@ -47,6 +47,11 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IExecutionCoordinator, ExecutionCoordinator>();
 builder.Services.AddSingleton<IExecutionLogService, ExecutionLogService>();
 
+// Register agentic AI services (optional - can be null if not configured)
+builder.Services.AddScoped<IReflectionService, ReflectionService>();
+builder.Services.AddScoped<IPlanningService, PlanningService>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+
 // Register validators
 builder.Services.AddScoped<IValidator<CreateTaskRequest>, CreateTaskRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateTaskRequest>, UpdateTaskRequestValidator>();
@@ -243,6 +248,7 @@ app.MapHealthChecks("/health");
 app.MapPrometheusScrapingEndpoint("/metrics");
 app.MapTaskEndpoints();
 app.MapEventTestEndpoints();
+app.MapFeedbackEndpoints();
 
 // Root endpoint
 app.MapGet("/", () => Results.Ok(new
