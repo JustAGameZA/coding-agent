@@ -21,7 +21,26 @@ on:
       - '.github/workflows/gateway-ci.yml'
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.filter.outputs.gateway }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            gateway:
+              - 'src/Gateway/**'
+              - 'src/SharedKernel/**'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+
   build:
+    needs: check-changes
+    if: needs.check-changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

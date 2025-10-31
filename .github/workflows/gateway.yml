@@ -22,7 +22,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.filter.outputs.gateway }}
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            gateway:
+              - 'src/Gateway/**'
+              - 'src/SharedKernel/**'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+            dockerfile:
+              - 'src/Gateway/**/Dockerfile'
+              - 'src/Gateway/**/.dockerignore'
+
   build-test:
+    needs: check-changes
+    if: needs.check-changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -62,6 +85,7 @@ jobs:
         continue-on-error: false
 
       - name: Conditional Docker build
+        if: needs.check-changes.outputs.dockerfile == 'true'
         run: |
           set -e
           if [ -f src/Gateway/CodingAgent.Gateway/Dockerfile ]; then

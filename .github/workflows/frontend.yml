@@ -22,7 +22,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      gateway: ${{ steps.filter.outputs.gateway }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/Frontend/coding-agent-dashboard/**'
+            dashboard:
+              - 'src/Services/Dashboard/**'
+            gateway:
+              - 'src/Gateway/**'
+
   build-test:
+    needs: check-changes
+    if: needs.check-changes.outputs.frontend == 'true' || needs.check-changes.outputs.dashboard == 'true' || needs.check-changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
