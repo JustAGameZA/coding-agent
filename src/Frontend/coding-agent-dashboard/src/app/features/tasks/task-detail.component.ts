@@ -1,33 +1,44 @@
-import { Component, Input, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDividerModule } from '@angular/material/divider';
 import { ReflectionPanelComponent } from './components/reflection-panel.component';
 import { PlanningProgressComponent } from './components/planning-progress.component';
 import { FeedbackSubmitComponent } from './components/feedback-submit.component';
 import { MemoryContextComponent } from './components/memory-context.component';
 import { ThinkingProcessComponent } from './components/thinking-process.component';
+import { DashboardService } from '../../core/services/dashboard.service';
+import { AgenticBadgeComponent } from '../../shared/components/agentic-badge.component';
+import { StatusChipComponent } from '../../shared/components/status-chip.component';
+import { LoadingStateComponent } from '../../shared/components/loading-state.component';
 
 @Component({
   selector: 'app-task-detail',
   standalone: true,
   imports: [
     CommonModule,
+    RouterModule,
     MatCardModule,
     MatIconModule,
     MatChipsModule,
     MatTabsModule,
     MatButtonModule,
     MatProgressSpinnerModule,
+    MatDividerModule,
     ReflectionPanelComponent,
     PlanningProgressComponent,
     FeedbackSubmitComponent,
     MemoryContextComponent,
-    ThinkingProcessComponent
+    ThinkingProcessComponent,
+    AgenticBadgeComponent,
+    StatusChipComponent,
+    LoadingStateComponent
   ],
   template: `
     <div class="task-detail" *ngIf="taskId()">
@@ -122,15 +133,25 @@ import { ThinkingProcessComponent } from './components/thinking-process.componen
       </mat-tab-group>
     </div>
 
-    <div class="loading-overlay" *ngIf="loading()">
-      <mat-progress-spinner mode="indeterminate" diameter="60"></mat-progress-spinner>
-    </div>
+    <app-loading-state 
+      *ngIf="loading()" 
+      mode="spinner" 
+      size="60"
+      message="Loading task details...">
+    </app-loading-state>
   `,
   styles: [`
     .task-detail {
       max-width: 1400px;
       margin: 0 auto;
       padding: 24px;
+    }
+
+    .back-button {
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .task-header {
@@ -141,6 +162,20 @@ import { ThinkingProcessComponent } from './components/thinking-process.componen
       display: flex;
       align-items: center;
       gap: 12px;
+    }
+
+    .header-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .header-badges {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
     .header-icon {
@@ -205,22 +240,50 @@ import { ThinkingProcessComponent } from './components/thinking-process.componen
     }
   `]
 })
-export class TaskDetailComponent {
-  private taskId = signal<string | null>(null);
+export class TaskDetailComponent implements OnInit {
+  private route = inject(ActivatedRoute);
+  private dashboardService = inject(DashboardService);
+  private router = inject(RouterModule);
+
+  taskId = signal<string | null>(null);
   task = signal<any>(null); // TODO: Use proper Task type
   loading = signal<boolean>(false);
+  hasAgenticFeatures = signal<boolean>(false);
 
-  @Input()
-  set id(value: string) {
-    this.taskId.set(value);
-    if (value) {
-      this.loadTask();
-    }
+  ngOnInit() {
+    this.route.params.subscribe(params => {
+      const id = params['id'];
+      if (id) {
+        this.taskId.set(id);
+        this.loadTask();
+      }
+    });
   }
 
   private loadTask() {
-    // TODO: Load task from service
-    this.loading.set(false);
+    this.loading.set(true);
+    // TODO: Load task from service using taskId
+    // For now, create a mock task
+    this.task.set({
+      id: this.taskId(),
+      title: 'Sample Task',
+      description: 'Task description here',
+      status: 'Running',
+      type: 'Feature',
+      complexity: 'High',
+      duration: 120000,
+      executionId: 'exec-' + this.taskId()
+    });
+    
+    // Check if task has agentic features
+    this.checkAgenticFeatures();
+    
+    setTimeout(() => this.loading.set(false), 500);
+  }
+
+  private checkAgenticFeatures() {
+    // TODO: Check if task has plan, reflection, etc.
+    this.hasAgenticFeatures.set(true);
   }
 
   loadReflection() {

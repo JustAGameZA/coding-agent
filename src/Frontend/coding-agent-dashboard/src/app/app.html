@@ -45,8 +45,13 @@
         <span matListItemTitle>Chat</span>
       </a>
       <a mat-list-item routerLink="/tasks" routerLinkActive="active">
-        <mat-icon matListItemIcon>task</mat-icon>
+        <mat-icon matListItemIcon>assignment</mat-icon>
         <span matListItemTitle>Tasks</span>
+      </a>
+      <a mat-list-item routerLink="/agentic" routerLinkActive="active">
+        <mat-icon matListItemIcon>psychology</mat-icon>
+        <span matListItemTitle>Agentic AI</span>
+        <app-agentic-badge label="New" style="margin-left: auto;"></app-agentic-badge>
       </a>
       <a mat-list-item routerLink="/admin/infrastructure" routerLinkActive="active" *ngIf="isAdmin()">
         <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
