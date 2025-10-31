@@ -28,7 +28,8 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
     StatusChipComponent,
     AgenticBadgeComponent,
     LoadingStateComponent,
-    EmptyStateComponent
+    EmptyStateComponent,
+    ErrorStateComponent
   ],
   template: `
     <div class="tasks-container">
@@ -45,10 +46,12 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
             message="Loading tasks...">
           </app-loading-state>
 
-          <div class="error-message" *ngIf="error()">
-            <mat-icon>error</mat-icon>
-            <span>{{ error() }}</span>
-          </div>
+          <app-error-state 
+            *ngIf="error()"
+            [message]="error()!"
+            [showBack]="false"
+            (onRetry)="loadTasks()">
+          </app-error-state>
 
           <div class="table-container" *ngIf="!loading() && tasks().length > 0">
             <table mat-table [dataSource]="tasks()" class="tasks-table" [attr.data-testid]="'tasks-table'">
@@ -184,16 +187,6 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       min-height: 300px;
     }
 
-    .error-message {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background-color: #ffebee;
-      color: #c62828;
-      border-radius: 4px;
-      margin-bottom: 24px;
-    }
 
     .table-container {
       overflow-x: auto;

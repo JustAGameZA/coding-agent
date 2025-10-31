@@ -30,14 +30,19 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
         </button>
       </div>
       
-      <div class="loading-overlay" *ngIf="loading()">
-        <mat-progress-spinner mode="indeterminate" diameter="60"></mat-progress-spinner>
-      </div>
+      <app-loading-state 
+        *ngIf="loading()" 
+        mode="spinner" 
+        size="60"
+        message="Loading dashboard...">
+      </app-loading-state>
 
-      <div class="error-message" *ngIf="error()">
-        <mat-icon>error</mat-icon>
-        <span>{{ error() }}</span>
-      </div>
+      <app-error-state 
+        *ngIf="error()"
+        [message]="error()!"
+        [showBack]="false"
+        (onRetry)="loadStats()">
+      </app-error-state>
 
       <div class="dashboard-stats" *ngIf="stats() && !loading()">
         <!-- Conversations & Messages -->
@@ -138,23 +143,6 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       font-size: 28px;
     }
 
-    .loading-overlay {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 400px;
-    }
-
-    .error-message {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background-color: #ffebee;
-      color: #c62828;
-      border-radius: 4px;
-      margin-bottom: 24px;
-    }
 
     .dashboard-stats {
       display: grid;
