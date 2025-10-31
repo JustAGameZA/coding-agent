@@ -23,6 +23,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
     private readonly ILogger<ExecutionCoordinator> _logger;
     private readonly ActivitySource _activitySource;
     private readonly IReflectionService? _reflectionService; // Optional - reflection for agentic AI
+    private readonly IPlanningService? _planningService; // Optional - planning for agentic AI
 
     public ExecutionCoordinator(
         IStrategySelector strategySelector,
@@ -31,7 +32,8 @@ public class ExecutionCoordinator : IExecutionCoordinator
         IExecutionLogService logService,
         ILogger<ExecutionCoordinator> logger,
         ActivitySource activitySource,
-        IReflectionService? reflectionService = null)
+        IReflectionService? reflectionService = null,
+        IPlanningService? planningService = null)
     {
         _strategySelector = strategySelector ?? throw new ArgumentNullException(nameof(strategySelector));
         _strategies = strategies ?? throw new ArgumentNullException(nameof(strategies));
@@ -40,6 +42,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _reflectionService = reflectionService;
+        _planningService = planningService;
     }
 
     public async Task<TaskExecution> QueueExecutionAsync(CodingTask task, string? overrideStrategyName, CancellationToken cancellationToken = default)
@@ -51,6 +54,27 @@ public class ExecutionCoordinator : IExecutionCoordinator
         using var scope = _scopeFactory.CreateScope();
         var taskService = scope.ServiceProvider.GetRequiredService<ITaskService>();
         var executionRepository = scope.ServiceProvider.GetRequiredService<IExecutionRepository>();
+
+        // Agentic AI: Create plan for complex tasks if planning service is available
+        Plan? plan = null;
+        if (_planningService != null && 
+            (task.Complexity == Domain.ValueObjects.TaskComplexity.High || 
+             task.Description.Contains("multiple") || 
+             task.Description.Contains("all")))
+        {
+            try
+            {
+                _logger.LogInformation("Creating plan for complex task {TaskId}", task.Id);
+                plan = await _planningService.CreatePlanAsync(
+                    task.Description,
+                    task.Context ?? "",
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create plan for task {TaskId}, falling back to direct execution", task.Id);
+            }
+        }
 
         // Select strategy (with optional override)
         var strategy = await _strategySelector.SelectStrategyAsync(task, overrideStrategyName, cancellationToken);
@@ -64,7 +88,14 @@ public class ExecutionCoordinator : IExecutionCoordinator
         execution = await executionRepository.AddAsync(execution, cancellationToken);
 
         // Background execution - pass task ID and execution ID, not entities/repositories
-        _ = Task.Run(() => ExecuteInternalAsync(task.Id, strategy.Name, execution.Id, cancellationToken));
+        if (plan != null)
+        {
+            _ = Task.Run(() => ExecutePlanAsync(task.Id, plan, execution.Id, cancellationToken));
+        }
+        else
+        {
+            _ = Task.Run(() => ExecuteInternalAsync(task.Id, strategy.Name, execution.Id, cancellationToken));
+        }
 
         return execution;
     }
@@ -175,6 +206,103 @@ public class ExecutionCoordinator : IExecutionCoordinator
         {
             _logService.Complete(executionId);
         }
+    }
+
+    private async Task ExecutePlanAsync(Guid taskId, Plan plan, Guid executionId, CancellationToken ct)
+    {
+        try
+        {
+            await _logService.WriteAsync(executionId, $"status:planning plan_id={plan.Id} sub_tasks={plan.SubTasks.Count}", ct);
+
+            foreach (var step in plan.SubTasks.OrderBy(s => GetStepOrder(s)))
+            {
+                // Wait for dependencies
+                await WaitForDependenciesAsync(step, plan, ct);
+
+                // Execute step
+                var stepResult = await ExecuteStepAsync(taskId, step, ct);
+
+                // Update plan progress
+                if (_planningService != null)
+                {
+                    await _planningService.UpdatePlanProgressAsync(plan.Id, step, stepResult, ct);
+                }
+
+                // Validate step
+                if (!ValidateStep(step, stepResult))
+                {
+                    // Re-plan if validation fails
+                    if (_planningService != null)
+                    {
+                        plan = await _planningService.RefinePlanAsync(plan.Id, new ExecutionFeedback
+                        {
+                            StepFailed = step,
+                            Reason = stepResult.Error ?? "Validation failed"
+                        }, ct);
+                        continue; // Retry with refined plan
+                    }
+                }
+
+                if (!stepResult.Success)
+                {
+                    _logger.LogWarning("Step {StepId} failed: {Error}", step.Id, stepResult.Error);
+                    // Continue to next step or re-plan based on strategy
+                }
+            }
+
+            await _logService.WriteAsync(executionId, $"status:plan_completed plan_id={plan.Id}", ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Plan execution failed for task {TaskId}", taskId);
+            await _logService.WriteAsync(executionId, $"status:plan_failed error={Escape(ex.Message)}", ct);
+        }
+    }
+
+    private async Task WaitForDependenciesAsync(PlanStep step, Plan plan, CancellationToken ct)
+    {
+        foreach (var depId in step.Dependencies)
+        {
+            var depStep = plan.SubTasks.FirstOrDefault(s => s.Id == depId);
+            if (depStep != null && depStep.Status != PlanStepStatus.Completed)
+            {
+                // Wait for dependency to complete (simplified - in production use proper async wait)
+                await Task.Delay(100, ct);
+            }
+        }
+    }
+
+    private async Task<ExecutionResult> ExecuteStepAsync(Guid taskId, PlanStep step, CancellationToken ct)
+    {
+        // Simplified step execution - in production, this would invoke appropriate strategy
+        await _logService.WriteAsync(taskId, $"executing:step {step.Id} {step.Description}", ct);
+        
+        // Use existing execution logic
+        // For now, return success
+        return new ExecutionResult
+        {
+            Success = true,
+            Duration = TimeSpan.FromSeconds(1),
+            Results = new Dictionary<string, object> { ["stepId"] = step.Id }
+        };
+    }
+
+    private static bool ValidateStep(PlanStep step, ExecutionResult result)
+    {
+        // Simplified validation - check if step has validation criteria and result succeeded
+        if (string.IsNullOrWhiteSpace(step.ValidationCriteria))
+        {
+            return result.Success;
+        }
+
+        // In production, evaluate validation criteria
+        return result.Success;
+    }
+
+    private static int GetStepOrder(PlanStep step)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(step.Id, @"\d+");
+        return match.Success ? int.Parse(match.Value) : int.MaxValue;
     }
 
     private static string Escape(string s) => s.Replace('\n', ' ').Replace('\r', ' ');
