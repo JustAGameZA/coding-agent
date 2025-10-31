@@ -81,6 +81,7 @@ jobs:
           --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
+        if: needs.check-changes.outputs.dockerfile == 'true' || needs.check-changes.outputs.cicd == 'true'
         run: |
           set -e
           if [ -f src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor/Dockerfile ]; then
