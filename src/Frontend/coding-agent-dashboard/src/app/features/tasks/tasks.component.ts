@@ -15,13 +15,20 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
   selector: 'app-tasks',
   standalone: true,
   imports: [
-    CommonModule, 
+    CommonModule,
+    RouterModule,
     MatCardModule, 
     MatTableModule, 
     MatPaginatorModule, 
     MatIconModule, 
     MatProgressSpinnerModule,
-    MatChipsModule
+    MatChipsModule,
+    MatButtonModule,
+    MatTooltipModule,
+    StatusChipComponent,
+    AgenticBadgeComponent,
+    LoadingStateComponent,
+    EmptyStateComponent
   ],
   template: `
     <div class="tasks-container">
@@ -31,9 +38,12 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
           <mat-card-title>Tasks</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <div class="loading-overlay" *ngIf="loading()">
-            <mat-progress-spinner mode="indeterminate" diameter="50"></mat-progress-spinner>
-          </div>
+          <app-loading-state 
+            *ngIf="loading()" 
+            mode="spinner" 
+            size="50"
+            message="Loading tasks...">
+          </app-loading-state>
 
           <div class="error-message" *ngIf="error()">
             <mat-icon>error</mat-icon>
@@ -45,7 +55,18 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
               <!-- Title Column -->
               <ng-container matColumnDef="title">
                 <th mat-header-cell *matHeaderCellDef>Title</th>
-                <td mat-cell *matCellDef="let task" [attr.data-testid]="'task-title'">{{ task.title }}</td>
+                <td mat-cell *matCellDef="let task" [attr.data-testid]="'task-title'">
+                  <div class="title-cell">
+                    <a [routerLink]="['/tasks', task.id]" class="task-link">
+                      {{ task.title }}
+                    </a>
+                    <app-agentic-badge 
+                      *ngIf="hasAgenticFeatures(task.id)"
+                      label="AI"
+                      tooltip="Agentic AI features active">
+                    </app-agentic-badge>
+                  </div>
+                </td>
               </ng-container>
 
               <!-- Type Column -->
@@ -72,10 +93,11 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
               <ng-container matColumnDef="status">
                 <th mat-header-cell *matHeaderCellDef>Status</th>
                 <td mat-cell *matCellDef="let task">
-                  <mat-chip [class]="'status-chip status-' + task.status.toLowerCase()" [attr.data-testid]="'task-status'">
-                    <mat-icon>{{ getStatusIcon(task.status) }}</mat-icon>
-                    {{ task.status }}
-                  </mat-chip>
+                  <app-status-chip 
+                    [status]="task.status"
+                    [agenticEnabled]="hasAgenticFeatures(task.id)"
+                    [badge]="getStatusBadge(task)">
+                  </app-status-chip>
                 </td>
               </ng-container>
 
@@ -125,10 +147,12 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
             </mat-paginator>
           </div>
 
-          <div class="empty-state" *ngIf="!loading() && tasks().length === 0">
-            <mat-icon>inbox</mat-icon>
-            <p>No tasks found</p>
-          </div>
+          <app-empty-state 
+            *ngIf="!loading() && tasks().length === 0"
+            icon="assignment"
+            title="No Tasks"
+            message="You haven't created any tasks yet. Create your first task to get started!">
+          </app-empty-state>
         </mat-card-content>
       </mat-card>
     </div>
@@ -254,20 +278,22 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       color: #999;
     }
 
-    .empty-state {
+    .title-cell {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      min-height: 300px;
-      color: #999;
+      gap: 8px;
     }
 
-    .empty-state mat-icon {
-      font-size: 64px;
-      width: 64px;
-      height: 64px;
-      margin-bottom: 16px;
+    .task-link {
+      color: #333;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s ease;
+
+      &:hover {
+        color: #673ab7;
+        text-decoration: underline;
+      }
     }
 
     mat-paginator {
@@ -278,6 +304,7 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
 export class TasksComponent {
   private dashboardService = inject(DashboardService);
   private notificationService = inject(NotificationService);
+  private agenticAiService = inject(AgenticAiService);
 
   tasks = signal<EnrichedTask[]>([]);
   loading = signal<boolean>(true);
@@ -285,6 +312,7 @@ export class TasksComponent {
   currentPage = signal<number>(1);
   pageSize = signal<number>(20);
   totalCount = signal<number>(0);
+  agenticTaskIds = signal<Set<string>>(new Set()); // Track tasks with agentic AI features
 
   displayedColumns: string[] = ['title', 'type', 'complexity', 'status', 'duration', 'createdAt', 'pr'];
 
@@ -345,5 +373,18 @@ export class TasksComponent {
     } catch {
       return dateString;
     }
+  }
+
+  hasAgenticFeatures(taskId: string): boolean {
+    // Check if task has agentic AI features (plan, reflection, etc.)
+    return this.agenticTaskIds().has(taskId);
+  }
+
+  getStatusBadge(task: EnrichedTask): string | undefined {
+    // Return badge text for special statuses
+    if (task.status.toLowerCase() === 'running') {
+      return 'AI Active';
+    }
+    return undefined;
   }
 }
