@@ -171,6 +171,9 @@ builder.Services.AddSignalR();
 // FluentValidation - Register all validators from the Assembly
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+// Note: Minimal APIs don't use ApiBehaviorOptions the same way as controllers
+// Validation is handled directly in endpoints via FluentValidation
+
 // MassTransit + RabbitMQ
 builder.Services.AddMassTransit(x =>
 {

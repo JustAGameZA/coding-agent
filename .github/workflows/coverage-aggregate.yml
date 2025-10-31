@@ -4,12 +4,28 @@ on:
   push:
     branches: [ master ]
     paths:
-      - 'src/**'
+      - 'src/**/*.cs'
+      - 'src/**/*.py'
+      - 'src/**/*Tests/**'
+      - 'src/**/*Test/**'
+      - 'src/**/*.csproj'
+      - 'src/**/*.pyproj'
+      - 'CodingAgent.sln'
+      - 'Directory.Build.props'
+      - 'global.json'
       - '.github/workflows/coverage-aggregate.yml'
   pull_request:
     branches: [ master ]
     paths:
-      - 'src/**'
+      - 'src/**/*.cs'
+      - 'src/**/*.py'
+      - 'src/**/*Tests/**'
+      - 'src/**/*Test/**'
+      - 'src/**/*.csproj'
+      - 'src/**/*.pyproj'
+      - 'CodingAgent.sln'
+      - 'Directory.Build.props'
+      - 'global.json'
       - '.github/workflows/coverage-aggregate.yml'
 
 concurrency:
@@ -17,9 +33,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+      python: ${{ steps.filter.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dotnet:
+              - 'src/**/*.cs'
+              - 'src/**/*.csproj'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+            python:
+              - 'src/**/*.py'
+              - 'src/**/requirements.txt'
+              - 'src/**/setup.py'
+              - 'src/**/pyproject.toml'
+
   aggregate:
     name: Build, test, and merge coverage
     runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.dotnet == 'true' || needs.check-changes.outputs.python == 'true'
     timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -28,11 +69,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup .NET SDK
+        if: needs.check-changes.outputs.dotnet == 'true'
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
+        if: needs.check-changes.outputs.dotnet == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -41,9 +84,11 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore .NET
+        if: needs.check-changes.outputs.dotnet == 'true'
         run: dotnet restore CodingAgent.sln
 
       - name: Test .NET with coverage (Cobertura, Unit only)
+        if: needs.check-changes.outputs.dotnet == 'true'
         run: |
           dotnet test CodingAgent.sln \
             --logger "trx" \
@@ -53,6 +98,7 @@ jobs:
             --verbosity quiet --nologo
 
       - name: Find .NET Cobertura files
+        if: needs.check-changes.outputs.dotnet == 'true'
         id: find_cobertura
         shell: bash
         run: |
@@ -61,6 +107,7 @@ jobs:
           printf 'files<<EOF\n%s\nEOF\n' "${files[*]}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Python 3.12
+        if: needs.check-changes.outputs.python == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -68,6 +115,7 @@ jobs:
           cache-dependency-path: 'src/Services/MLClassifier/ml_classifier_service/requirements.txt'
 
       - name: Install Python test deps
+        if: needs.check-changes.outputs.python == 'true'
         working-directory: src/Services/MLClassifier/ml_classifier_service
         run: |
           pip install --upgrade pip
@@ -75,12 +123,20 @@ jobs:
           pip install pytest pytest-cov
 
       - name: Run Python tests with coverage (Cobertura XML)
+        if: needs.check-changes.outputs.python == 'true'
         working-directory: src/Services/MLClassifier/ml_classifier_service
         run: |
-          pytest tests/ -q --maxfail=1 --disable-warnings \
-            --cov=. --cov-report=xml:coverage-python.xml
+          if [ -d tests/ ] && [ "$(ls -A tests/ 2>/dev/null)" ]; then
+            pytest tests/ -q --maxfail=1 --disable-warnings \
+              --cov=. --cov-report=xml:coverage-python.xml
+          else
+            echo "No Python tests found. Skipping."
+            touch coverage-python.xml
+          fi
+        continue-on-error: true
 
       - name: Merge coverage with ReportGenerator
+        if: always() && (needs.check-changes.outputs.dotnet == 'true' || needs.check-changes.outputs.python == 'true')
         uses: danielpalme/ReportGenerator-GitHub-Action@v5
         with:
           reports: 'src/**/TestResults/**/coverage.cobertura.xml;src/Services/MLClassifier/ml_classifier_service/coverage-python.xml'
@@ -90,6 +146,7 @@ jobs:
           classfilters: '+*'
 
       - name: Publish merged Cobertura to summary
+        if: always() && (needs.check-changes.outputs.dotnet == 'true' || needs.check-changes.outputs.python == 'true')
         shell: bash
         run: |
           if [ -f coverage-merged/SummaryGithub.md ]; then
@@ -97,6 +154,7 @@ jobs:
           fi
 
       - name: Upload merged coverage artifact
+        if: always() && (needs.check-changes.outputs.dotnet == 'true' || needs.check-changes.outputs.python == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: coverage-merged

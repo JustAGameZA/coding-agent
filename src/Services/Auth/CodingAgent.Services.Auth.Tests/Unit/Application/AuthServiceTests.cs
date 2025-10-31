@@ -5,6 +5,7 @@ using CodingAgent.Services.Auth.Domain.Repositories;
 using CodingAgent.Services.Auth.Infrastructure.Security;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace CodingAgent.Services.Auth.Tests.Unit.Application;
@@ -16,7 +17,7 @@ public class AuthServiceTests
     private readonly Mock<ISessionRepository> _sessionRepositoryMock;
     private readonly Mock<IPasswordHasher> _passwordHasherMock;
     private readonly Mock<IJwtTokenGenerator> _jwtTokenGeneratorMock;
-    private readonly Mock<ILogger<AuthService>> _loggerMock;
+    private readonly ILogger<AuthService> _logger;
     private readonly AuthService _authService;
 
     public AuthServiceTests()
@@ -25,14 +26,14 @@ public class AuthServiceTests
         _sessionRepositoryMock = new Mock<ISessionRepository>();
         _passwordHasherMock = new Mock<IPasswordHasher>();
         _jwtTokenGeneratorMock = new Mock<IJwtTokenGenerator>();
-        _loggerMock = new Mock<ILogger<AuthService>>();
+        _logger = NullLogger<AuthService>.Instance;
 
         _authService = new AuthService(
             _userRepositoryMock.Object,
             _sessionRepositoryMock.Object,
             _passwordHasherMock.Object,
             _jwtTokenGeneratorMock.Object,
-            _loggerMock.Object
+            _logger
         );
     }
 

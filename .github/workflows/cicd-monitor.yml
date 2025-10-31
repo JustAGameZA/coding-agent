@@ -22,7 +22,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      cicd: ${{ steps.filter.outputs.cicd }}
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cicd:
+              - 'src/Services/CICDMonitor/**'
+              - 'src/SharedKernel/**'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+            dockerfile:
+              - 'src/Services/CICDMonitor/**/Dockerfile'
+              - 'src/Services/CICDMonitor/**/.dockerignore'
+
   build-test:
+    needs: check-changes
+    if: needs.check-changes.outputs.cicd == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -58,6 +81,7 @@ jobs:
           --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
+        if: needs.check-changes.outputs.dockerfile == 'true' || needs.check-changes.outputs.cicd == 'true'
         run: |
           set -e
           if [ -f src/Services/CICDMonitor/CodingAgent.Services.CICDMonitor/Dockerfile ]; then

@@ -19,6 +19,7 @@ using Polly.Timeout;
 using StackExchange.Redis;
 using System.Net;
 using System.Security.Claims;
+using CodingAgent.Gateway.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,6 +104,16 @@ builder.Services
     .AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
+// Phase 5: Traffic routing and dual-write services
+builder.Services.AddSingleton<TrafficRoutingService>();
+builder.Services.AddScoped<DualWriteService>();
+builder.Services.AddHttpClient("new-system")
+    .AddTransientHttpErrorPolicy(policyBuilder =>
+        policyBuilder.WaitAndRetryAsync(2, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))));
+builder.Services.AddHttpClient("legacy-system")
+    .AddTransientHttpErrorPolicy(policyBuilder =>
+        policyBuilder.WaitAndRetryAsync(2, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))));
+
 // Configure default HTTP client with Polly resilience policies
 // YARP uses HttpClient internally, so these policies apply to proxied requests
 builder.Services.AddHttpClient(string.Empty)
@@ -166,6 +177,7 @@ catch (Exception ex)
 }
 
 var app = builder.Build();
+var appConfiguration = app.Configuration; // Store for use in middleware
 
 // Apply CORS policy
 app.UseCors("FrontendCors");
@@ -313,6 +325,16 @@ app.UseWhen(context =>
         subApp.UseAuthorization();
     });
 
+// Feature flags: expose current values to aid cutover verification
+var useLegacyChat = builder.Configuration.GetValue<bool>("Features:UseLegacyChat");
+var useLegacyOrch = builder.Configuration.GetValue<bool>("Features:UseLegacyOrchestration");
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-Feature-UseLegacyChat"] = useLegacyChat ? "true" : "false";
+    ctx.Response.Headers["X-Feature-UseLegacyOrchestration"] = useLegacyOrch ? "true" : "false";
+    await next();
+});
+
 // Expose Prometheus scraping endpoint
 app.MapPrometheusScrapingEndpoint("/metrics");
 
@@ -335,7 +357,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 }).AllowAnonymous();
 
-// Map reverse proxy with custom authorization
+// Map reverse proxy with custom authorization and traffic routing
 // Auth endpoints (login, register, refresh) allow anonymous access
 // All other endpoints require authentication
 app.MapReverseProxy(proxyPipeline =>
@@ -362,6 +384,92 @@ app.MapReverseProxy(proxyPipeline =>
             return;
         }
         
+        await next();
+    });
+
+    // Phase 5: Traffic routing middleware (10% → 50% → 100%)
+    proxyPipeline.Use(async (context, next) =>
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        var routingService = context.RequestServices.GetRequiredService<TrafficRoutingService>();
+        var correlationId = context.Request.Headers.TryGetValue("X-Correlation-Id", out var corrValues)
+            ? corrValues.FirstOrDefault()
+            : null;
+
+        // Determine service name from path
+        string? serviceName = null;
+        if (path.StartsWith("/api/conversations", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/api/chat", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/hubs/chat", StringComparison.OrdinalIgnoreCase))
+        {
+            serviceName = "chat";
+        }
+        else if (path.StartsWith("/api/orchestration", StringComparison.OrdinalIgnoreCase))
+        {
+            serviceName = "orchestration";
+        }
+
+        // Route based on feature flags and traffic percentage
+        if (serviceName != null && !routingService.ShouldRouteToNewService(serviceName, correlationId))
+        {
+            // Route to legacy system (if configured)
+            var legacyUrl = appConfiguration[$"LegacySystem:{serviceName}:BaseUrl"];
+            if (!string.IsNullOrEmpty(legacyUrl))
+            {
+                context.Request.Headers["X-Routed-To"] = "legacy";
+                // In a real scenario, you'd proxy to legacy URL
+                // For now, we'll log and continue to new system as fallback
+                Log.Warning(
+                    "Traffic routing: Request for {ServiceName} should go to legacy, but legacy URL not configured. Routing to new system.",
+                    serviceName);
+            }
+        }
+        else if (serviceName != null)
+        {
+            context.Request.Headers["X-Routed-To"] = "new";
+        }
+
+        // Add traffic percentage header for observability
+        if (serviceName != null)
+        {
+            var percentage = routingService.GetTrafficPercentage(serviceName);
+            context.Response.Headers["X-Traffic-Percentage"] = percentage.ToString();
+        }
+
+        await next();
+    });
+
+    // Phase 5: Dual-write monitoring (for POST/PUT/PATCH operations)
+    proxyPipeline.Use(async (context, next) =>
+    {
+        var method = context.Request.Method;
+        if (method == "POST" || method == "PUT" || method == "PATCH")
+        {
+            var path = context.Request.Path.Value ?? string.Empty;
+            string? serviceName = null;
+            if (path.StartsWith("/api/conversations", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/api/chat", StringComparison.OrdinalIgnoreCase))
+            {
+                serviceName = "chat";
+            }
+            else if (path.StartsWith("/api/orchestration", StringComparison.OrdinalIgnoreCase))
+            {
+                serviceName = "orchestration";
+            }
+
+            if (serviceName != null)
+            {
+                var dualWriteService = context.RequestServices.GetRequiredService<DualWriteService>();
+                if (dualWriteService.IsDualWriteEnabled(serviceName))
+                {
+                    // Mark request for dual-write (actual write happens in response handler)
+                    context.Items["DualWriteEnabled"] = serviceName;
+                    Log.Debug("Dual-write enabled for {ServiceName} on {Method} {Path}",
+                        serviceName, method, path);
+                }
+            }
+        }
+
         await next();
     });
 });

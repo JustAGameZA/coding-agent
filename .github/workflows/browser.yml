@@ -22,7 +22,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      browser: ${{ steps.filter.outputs.browser }}
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            browser:
+              - 'src/Services/Browser/**'
+              - 'src/SharedKernel/**'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+            dockerfile:
+              - 'src/Services/Browser/**/Dockerfile'
+              - 'src/Services/Browser/**/.dockerignore'
+
   build-test:
+    needs: check-changes
+    if: needs.check-changes.outputs.browser == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -88,7 +111,7 @@ jobs:
           --filter "Category=Integration" --verbosity quiet --nologo --no-build
 
       - name: Conditional Docker build
-        if: success()
+        if: success() && (needs.check-changes.outputs.dockerfile == 'true' || needs.check-changes.outputs.browser == 'true')
         run: |
           set -e
           if [ -f src/Services/Browser/CodingAgent.Services.Browser/Dockerfile ]; then

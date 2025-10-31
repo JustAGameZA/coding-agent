@@ -22,7 +22,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      github: ${{ steps.filter.outputs.github }}
+      dockerfile: ${{ steps.filter.outputs.dockerfile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            github:
+              - 'src/Services/GitHub/**'
+              - 'src/SharedKernel/**'
+              - 'CodingAgent.sln'
+              - 'Directory.Build.props'
+              - 'global.json'
+            dockerfile:
+              - 'src/Services/GitHub/**/Dockerfile'
+              - 'src/Services/GitHub/**/.dockerignore'
+
   build-test:
+    needs: check-changes
+    if: needs.check-changes.outputs.github == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -58,6 +81,7 @@ jobs:
           --logger "trx;LogFileName=test_results.trx"
 
       - name: Conditional Docker build
+        if: needs.check-changes.outputs.dockerfile == 'true' || needs.check-changes.outputs.github == 'true'
         run: |
           set -e
           if [ -f src/Services/GitHub/CodingAgent.Services.GitHub/Dockerfile ]; then

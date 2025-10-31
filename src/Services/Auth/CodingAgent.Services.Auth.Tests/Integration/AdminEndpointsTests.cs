@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using CodingAgent.Services.Auth.Application.DTOs;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace CodingAgent.Services.Auth.Tests.Integration;
@@ -327,7 +328,7 @@ public class AdminEndpointsTests : IClassFixture<AuthServiceFixture>
         var userId = authResponse!.User.Id;
 
         // Manually update user to have Admin role (since registration creates User role only)
-        using var scope = _fixture.Services.CreateScope();
+        using var scope = _fixture.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CodingAgent.Services.Auth.Infrastructure.Persistence.AuthDbContext>();
         var user = await dbContext.Users.FindAsync(userId);
         user!.UpdateRoles("Admin,User");
@@ -360,7 +361,7 @@ public class AdminEndpointsTests : IClassFixture<AuthServiceFixture>
         // Update roles if needed
         if (roles != "User")
         {
-            using var scope = _fixture.Services.CreateScope();
+            using var scope = _fixture.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<CodingAgent.Services.Auth.Infrastructure.Persistence.AuthDbContext>();
             var user = await dbContext.Users.FindAsync(userId);
             user!.UpdateRoles(roles);

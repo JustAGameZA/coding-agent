@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import { LoginComponent } from './login.component';
@@ -13,11 +14,11 @@ describe('LoginComponent', () => {
   let fixture: ComponentFixture<LoginComponent>;
   let authService: jasmine.SpyObj<AuthService>;
   let notificationService: jasmine.SpyObj<NotificationService>;
-  let router: jasmine.SpyObj<Router>;
+  let router: Router;
   let activatedRoute: any;
 
   const mockLoginResponse: LoginResponse = {
-    token: 'mock-jwt-token',
+    accessToken: 'mock-jwt-token',
     refreshToken: 'mock-refresh-token',
     expiresIn: 3600,
     user: {
@@ -31,7 +32,6 @@ describe('LoginComponent', () => {
   beforeEach(async () => {
     const authServiceSpy = jasmine.createSpyObj('AuthService', ['login', 'isAuthenticated']);
     const notificationServiceSpy = jasmine.createSpyObj('NotificationService', ['info', 'error']);
-    const routerSpy = jasmine.createSpyObj('Router', ['navigate']);
     
     activatedRoute = {
       snapshot: {
@@ -45,19 +45,25 @@ describe('LoginComponent', () => {
       imports: [
         LoginComponent,
         ReactiveFormsModule,
-        NoopAnimationsModule
+        NoopAnimationsModule,
+        RouterTestingModule.withRoutes([
+          { path: 'login', component: LoginComponent },
+          { path: 'dashboard', component: class {} as any }
+        ])
       ],
       providers: [
         { provide: AuthService, useValue: authServiceSpy },
         { provide: NotificationService, useValue: notificationServiceSpy },
-        { provide: Router, useValue: routerSpy },
         { provide: ActivatedRoute, useValue: activatedRoute }
       ]
     }).compileComponents();
 
     authService = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
     notificationService = TestBed.inject(NotificationService) as jasmine.SpyObj<NotificationService>;
-    router = TestBed.inject(Router) as jasmine.SpyObj<Router>;
+    router = TestBed.inject(Router);
+    
+    // Spy on navigate to verify navigation calls
+    spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
 
     authService.isAuthenticated.and.returnValue(false);
 

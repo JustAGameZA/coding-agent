@@ -16,7 +16,7 @@ describe('RegisterComponent', () => {
   let router: jasmine.SpyObj<Router>;
 
   const mockLoginResponse: LoginResponse = {
-    token: 'mock-jwt-token',
+    accessToken: 'mock-jwt-token',
     refreshToken: 'mock-refresh-token',
     expiresIn: 3600,
     user: {
@@ -283,7 +283,8 @@ describe('RegisterComponent', () => {
       expect(authService.register).toHaveBeenCalledWith({
         username: 'newuser',
         email: 'new@example.com',
-        password: 'ValidPass123!'
+        password: 'ValidPass123!',
+        confirmPassword: 'ValidPass123!'
       });
     });
 
