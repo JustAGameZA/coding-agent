@@ -17,7 +17,7 @@ describe('LoginComponent', () => {
   let activatedRoute: any;
 
   const mockLoginResponse: LoginResponse = {
-    token: 'mock-jwt-token',
+    accessToken: 'mock-jwt-token',
     refreshToken: 'mock-refresh-token',
     expiresIn: 3600,
     user: {
