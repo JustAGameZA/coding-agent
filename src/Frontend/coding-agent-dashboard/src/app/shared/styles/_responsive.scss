@@ -1,0 +1,45 @@
+/**
+ * Responsive Design Utilities
+ */
+
+// Mobile-first breakpoints
+@mixin mobile {
+  @media (max-width: 767px) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: 768px) and (max-width: 1023px) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: 1024px) {
+    @content;
+  }
+}
+
+// Common responsive patterns
+@mixin responsive-grid($columns: auto-fit, $min-width: 280px) {
+  display: grid;
+  grid-template-columns: repeat($columns, minmax($min-width, 1fr));
+  gap: 24px;
+
+  @include mobile {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@mixin responsive-flex($direction: row, $gap: 16px) {
+  display: flex;
+  flex-direction: $direction;
+  gap: $gap;
+
+  @include mobile {
+    flex-direction: column;
+  }
+}
+

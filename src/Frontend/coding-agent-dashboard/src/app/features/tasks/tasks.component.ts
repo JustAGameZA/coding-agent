@@ -299,6 +299,20 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
     mat-paginator {
       margin-top: 16px;
     }
+
+    @media (max-width: 768px) {
+      .tasks-container {
+        padding: 16px;
+      }
+
+      .tasks-table {
+        min-width: 600px;
+      }
+
+      .displayedColumns {
+        font-size: 12px;
+      }
+    }
   `]
 })
 export class TasksComponent {

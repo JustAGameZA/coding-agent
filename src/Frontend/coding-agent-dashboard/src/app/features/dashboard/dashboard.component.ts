@@ -163,6 +163,17 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       margin-bottom: 24px;
     }
 
+    @media (max-width: 768px) {
+      .dashboard-container {
+        padding: 16px;
+      }
+
+      .dashboard-stats {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+    }
+
     .dashboard-actions {
       display: flex;
       justify-content: flex-end;

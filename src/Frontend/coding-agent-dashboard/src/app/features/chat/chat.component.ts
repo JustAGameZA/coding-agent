@@ -71,22 +71,109 @@ import * as signalR from '@microsoft/signalr';
     </div>
   `,
   styles: [`
-    .chat-grid { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 112px); gap: 16px; padding: 16px; }
-    .sidebar { background: #fafafa; border-right: 1px solid #eee; overflow: auto; }
-    .thread { display: flex; }
-    .thread-card { flex: 1; display: flex; flex-direction: column; }
-    mat-card-content { flex: 1; overflow: auto; }
-    .title-row { display: flex; align-items: center; width: 100%; }
-    .spacer { flex: 1; }
-    .conn { display: inline-flex; align-items: center; gap: 4px; opacity: 0.7; }
-    .conn.ok { color: #2e7d32; }
-    .conn.reconnecting { color: #f9a825; }
-    .upload { padding: 0 16px 16px; }
-    .agent-status { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: rgba(103, 58, 183, 0.1); border-radius: 12px; font-size: 0.875rem; color: #673ab7; animation: pulse 2s infinite; }
-    .agent-status .thinking-icon { font-size: 20px; width: 20px; height: 20px; animation: rotate 2s linear infinite; }
-    .agent-status .status-text { font-weight: 500; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .chat-grid { 
+      display: grid; 
+      grid-template-columns: 320px 1fr; 
+      height: calc(100vh - 112px); 
+      gap: 16px; 
+      padding: 16px; 
+    }
+    
+    .sidebar { 
+      background: #fafafa; 
+      border-right: 1px solid #eee; 
+      overflow: auto; 
+    }
+    
+    .thread { 
+      display: flex; 
+    }
+    
+    .thread-card { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+    }
+    
+    mat-card-content { 
+      flex: 1; 
+      overflow: auto; 
+    }
+    
+    .title-row { 
+      display: flex; 
+      align-items: center; 
+      width: 100%; 
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    
+    .spacer { 
+      flex: 1; 
+    }
+    
+    .conn { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 4px; 
+      opacity: 0.7; 
+    }
+    
+    .conn.ok { 
+      color: #2e7d32; 
+    }
+    
+    .conn.reconnecting { 
+      color: #f9a825; 
+    }
+    
+    .upload { 
+      padding: 0 16px 16px; 
+    }
+    
+    .agent-status { 
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+      padding: 4px 12px; 
+      background: rgba(103, 58, 183, 0.1); 
+      border-radius: 12px; 
+      font-size: 0.875rem; 
+      color: #673ab7; 
+      animation: pulse 2s infinite; 
+    }
+    
+    .agent-status .thinking-icon { 
+      font-size: 20px; 
+      width: 20px; 
+      height: 20px; 
+      animation: rotate 2s linear infinite; 
+    }
+    
+    .agent-status .status-text { 
+      font-weight: 500; 
+    }
+    
+    @keyframes pulse { 
+      0%, 100% { opacity: 1; } 
+      50% { opacity: 0.6; } 
+    }
+    
+    @keyframes rotate { 
+      from { transform: rotate(0deg); } 
+      to { transform: rotate(360deg); } 
+    }
+
+    @media (max-width: 768px) {
+      .chat-grid {
+        grid-template-columns: 1fr;
+        height: calc(100vh - 64px);
+      }
+
+      .sidebar {
+        display: none; // Hide sidebar on mobile, show as overlay instead
+      }
+    }
   `]
 })
 export class ChatComponent {
