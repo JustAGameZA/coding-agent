@@ -283,7 +283,8 @@ describe('RegisterComponent', () => {
       expect(authService.register).toHaveBeenCalledWith({
         username: 'newuser',
         email: 'new@example.com',
-        password: 'ValidPass123!'
+        password: 'ValidPass123!',
+        confirmPassword: 'ValidPass123!'
       });
     });
 

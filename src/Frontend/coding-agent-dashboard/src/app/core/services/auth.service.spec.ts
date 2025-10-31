@@ -147,7 +147,8 @@ describe('AuthService', () => {
       const registerRequest: RegisterRequest = {
         username: 'newuser',
         email: 'new@example.com',
-        password: 'ValidPass123!'
+        password: 'ValidPass123!',
+        confirmPassword: 'ValidPass123!'
       };
 
       service.register(registerRequest).subscribe();
