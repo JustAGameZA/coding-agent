@@ -270,18 +270,23 @@ Format your response as JSON:
         return new List<string>();
     }
 
-    private static Episode CreateEpisodeFromReflection(Guid executionId, ReflectionResult reflection)
+    private static IMemoryService.Episode CreateEpisodeFromReflection(Guid executionId, ReflectionResult reflection)
     {
         // Helper method to create Episode from ReflectionResult
-        // This will need to be updated when Memory Service is integrated
-        return new Episode(
-            null, // TaskId would come from execution context
-            executionId,
-            Guid.Empty, // UserId would come from execution context
-            DateTime.UtcNow,
-            "reflection",
-            new Dictionary<string, object> { ["executionId"] = executionId },
-            new Dictionary<string, object>
+        // Note: This uses a simplified Episode type - will use actual Memory Service types when integrated
+        // For now, we use the IMemoryService.Episode interface
+        
+        // Create episode data structure compatible with Memory Service
+        // When Memory Service is integrated, use: new CodingAgent.Services.Memory.Domain.Entities.Episode(...)
+        return new SimpleEpisode
+        {
+            TaskId = null,
+            ExecutionId = executionId,
+            UserId = Guid.Empty,
+            Timestamp = DateTime.UtcNow,
+            EventType = "reflection",
+            Context = new Dictionary<string, object> { ["executionId"] = executionId },
+            Outcome = new Dictionary<string, object>
             {
                 ["strengths"] = reflection.Strengths,
                 ["weaknesses"] = reflection.Weaknesses,
@@ -289,8 +294,22 @@ Format your response as JSON:
                 ["improvementSuggestions"] = reflection.ImprovementSuggestions,
                 ["confidenceScore"] = reflection.ConfidenceScore
             },
-            reflection.KeyLessons);
+            LearnedPatterns = reflection.KeyLessons
+        };
     }
+}
+
+// Temporary Episode implementation for compilation
+internal class SimpleEpisode : IMemoryService.Episode
+{
+    public Guid? TaskId { get; set; }
+    public Guid? ExecutionId { get; set; }
+    public Guid UserId { get; set; }
+    public DateTime Timestamp { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public Dictionary<string, object> Context { get; set; } = new();
+    public Dictionary<string, object> Outcome { get; set; } = new();
+    public List<string> LearnedPatterns { get; set; } = new();
 }
 
 // Temporary Episode class for compilation - will use actual Memory Service types when integrated

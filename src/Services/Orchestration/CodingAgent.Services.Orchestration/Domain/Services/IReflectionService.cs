@@ -42,6 +42,19 @@ public interface IMemoryService
 {
     Task<Episode> RecordEpisodeAsync(Episode episode, CancellationToken ct);
     Task<IEnumerable<Episode>> RetrieveSimilarEpisodesAsync(string query, int limit, CancellationToken ct);
+    
+    // Episode interface for Memory Service integration
+    public interface Episode
+    {
+        Guid? TaskId { get; }
+        Guid? ExecutionId { get; }
+        Guid UserId { get; }
+        DateTime Timestamp { get; }
+        string EventType { get; }
+        Dictionary<string, object> Context { get; }
+        Dictionary<string, object> Outcome { get; }
+        List<string> LearnedPatterns { get; }
+    }
 }
 
 /// <summary>
