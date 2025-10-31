@@ -126,12 +126,27 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
                 <td mat-cell *matCellDef="let task">
                   <a *ngIf="task.pullRequestNumber" 
                      [href]="'#/pr/' + task.pullRequestNumber" 
+                     target="_blank"
                      class="pr-link"
                      [attr.data-testid]="'task-pr-link'">
                     <mat-icon>code</mat-icon>
                     #{{ task.pullRequestNumber }}
                   </a>
                   <span *ngIf="!task.pullRequestNumber" class="no-pr">-</span>
+                </td>
+              </ng-container>
+
+              <!-- Actions Column -->
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef>Actions</th>
+                <td mat-cell *matCellDef="let task">
+                  <button 
+                    mat-icon-button 
+                    [routerLink]="['/tasks', task.id]"
+                    [matTooltip]="'View details'"
+                    color="primary">
+                    <mat-icon>visibility</mat-icon>
+                  </button>
                 </td>
               </ng-container>
 
