@@ -187,9 +187,9 @@ public class ExecutionCoordinator : IExecutionCoordinator
                 await executionRepository.UpdateAsync(execution, ct);
 
                 // Record error metrics
-                var strategyName = execution.Strategy.ToString();
-                var taskType = task.Type?.ToString() ?? "unknown";
-                ErrorMetrics.RecordTaskExecutionError(strategyName, taskType, "execution_failure");
+                var execStrategyName = execution.Strategy.ToString();
+                var taskType = task.Type.ToString();
+                ErrorMetrics.RecordTaskExecutionError(execStrategyName, taskType, "execution_failure");
                 ErrorMetrics.RecordErrorBySeverity("error", "task_execution");
                 
                 // Record model failure if applicable
@@ -225,9 +225,9 @@ public class ExecutionCoordinator : IExecutionCoordinator
                 
                 if (task != null && execution != null)
                 {
-                    var strategyName = execution.Strategy.ToString();
-                    var taskType = task.Type?.ToString() ?? "unknown";
-                    ErrorMetrics.RecordTaskExecutionError(strategyName, taskType, "exception");
+                    var execStrategyName = execution.Strategy.ToString();
+                    var taskType = task.Type.ToString();
+                    ErrorMetrics.RecordTaskExecutionError(execStrategyName, taskType, "exception");
                     ErrorMetrics.RecordErrorBySeverity("critical", ex.GetType().Name);
                     
                     if (!string.IsNullOrEmpty(execution.ModelUsed))

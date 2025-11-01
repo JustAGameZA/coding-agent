@@ -274,9 +274,48 @@ builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource
         .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
     .WithTracing(tracing => tracing
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation()
+        .AddAspNetCoreInstrumentation(options =>
+        {
+            options.RecordException = true;
+            options.EnrichWithHttpRequest = (activity, request) =>
+            {
+                // HttpRequest doesn't have HasError property, check status code instead
+                if (request != null)
+                {
+                    activity?.SetTag("http.request.method", request.Method);
+                    activity?.SetTag("http.request.path", request.Path);
+                }
+            };
+            options.EnrichWithHttpResponse = (activity, response) =>
+            {
+                activity?.SetTag("http.response.status_code", response?.StatusCode);
+                if (response != null && response.StatusCode >= 400)
+                {
+                    activity?.SetTag("error", true);
+                    activity?.SetTag("error.type", $"HTTP_{response.StatusCode}");
+                }
+            };
+        })
+        .AddHttpClientInstrumentation(options =>
+        {
+            options.RecordException = true;
+            options.EnrichWithHttpRequestMessage = (activity, request) =>
+            {
+                activity?.SetTag("http.request.method", request?.Method?.ToString());
+                activity?.SetTag("http.request.url", request?.RequestUri?.ToString());
+            };
+            options.EnrichWithHttpResponseMessage = (activity, response) =>
+            {
+                if (response != null && !response.IsSuccessStatusCode)
+                {
+                    activity?.SetTag("error", true);
+                    activity?.SetTag("error.type", $"HTTP_{response.StatusCode}");
+                    activity?.SetTag("http.response.status_code", response.StatusCode);
+                }
+            };
+        })
         .AddEntityFrameworkCoreInstrumentation()
+        .AddSource("CodingAgent.Services.Orchestration")
         .AddOtlpExporter(options =>
         {
             // Default OTLP endpoint (will be configured via appsettings for production)

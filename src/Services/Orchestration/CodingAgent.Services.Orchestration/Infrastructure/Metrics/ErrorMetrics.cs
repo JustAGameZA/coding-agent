@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
 namespace CodingAgent.Services.Orchestration.Infrastructure.Metrics;
@@ -85,94 +86,118 @@ public static class ErrorMetrics
     // Helper method to record task execution error
     public static void RecordTaskExecutionError(string strategy, string taskType, string? errorType = null)
     {
-        var tags = new TagList { { "strategy", strategy }, { "task_type", taskType } };
         if (!string.IsNullOrEmpty(errorType))
         {
-            tags.Add("error_type", errorType);
+            TaskExecutionErrors.Add(1, new KeyValuePair<string, object?>("strategy", strategy), 
+                new KeyValuePair<string, object?>("task_type", taskType),
+                new KeyValuePair<string, object?>("error_type", errorType));
+        }
+        else
+        {
+            TaskExecutionErrors.Add(1, new KeyValuePair<string, object?>("strategy", strategy), 
+                new KeyValuePair<string, object?>("task_type", taskType));
         }
 
-        TaskExecutionErrors.Add(1, tags);
-        TaskExecutionErrorsByStrategy.Add(1, new TagList { { "strategy", strategy } });
-        TaskExecutionErrorsByType.Add(1, new TagList { { "task_type", taskType } });
+        TaskExecutionErrorsByStrategy.Add(1, new KeyValuePair<string, object?>("strategy", strategy));
+        TaskExecutionErrorsByType.Add(1, new KeyValuePair<string, object?>("task_type", taskType));
     }
 
     // Helper method to record LLM error
     public static void RecordLlmError(string model, string? errorType = null)
     {
-        var tags = new TagList { { "model", model } };
         if (!string.IsNullOrEmpty(errorType))
         {
-            tags.Add("error_type", errorType);
+            LlmErrors.Add(1, new KeyValuePair<string, object?>("model", model),
+                new KeyValuePair<string, object?>("error_type", errorType));
+        }
+        else
+        {
+            LlmErrors.Add(1, new KeyValuePair<string, object?>("model", model));
         }
 
-        LlmErrors.Add(1, tags);
-        LlmErrorsByModel.Add(1, new TagList { { "model", model } });
+        LlmErrorsByModel.Add(1, new KeyValuePair<string, object?>("model", model));
     }
 
     // Helper method to record external service error
     public static void RecordExternalServiceError(string service, string? errorType = null)
     {
-        var tags = new TagList { { "service", service } };
         if (!string.IsNullOrEmpty(errorType))
         {
-            tags.Add("error_type", errorType);
+            ExternalServiceErrors.Add(1, new KeyValuePair<string, object?>("service", service),
+                new KeyValuePair<string, object?>("error_type", errorType));
+        }
+        else
+        {
+            ExternalServiceErrors.Add(1, new KeyValuePair<string, object?>("service", service));
         }
 
-        ExternalServiceErrors.Add(1, tags);
-        ExternalServiceErrorsByService.Add(1, new TagList { { "service", service } });
+        ExternalServiceErrorsByService.Add(1, new KeyValuePair<string, object?>("service", service));
     }
 
     // Helper method to record validation error
     public static void RecordValidationError(string? validationType = null)
     {
-        var tags = new TagList();
         if (!string.IsNullOrEmpty(validationType))
         {
-            tags.Add("validation_type", validationType);
+            ValidationErrors.Add(1, new KeyValuePair<string, object?>("validation_type", validationType));
         }
-
-        ValidationErrors.Add(1, tags);
+        else
+        {
+            ValidationErrors.Add(1);
+        }
     }
 
     // Helper method to record plan execution error
     public static void RecordPlanExecutionError(string? planId = null, string? errorType = null)
     {
-        var tags = new TagList();
+        var tags = new List<KeyValuePair<string, object?>>();
         if (!string.IsNullOrEmpty(planId))
         {
-            tags.Add("plan_id", planId);
+            tags.Add(new KeyValuePair<string, object?>("plan_id", planId));
         }
         if (!string.IsNullOrEmpty(errorType))
         {
-            tags.Add("error_type", errorType);
+            tags.Add(new KeyValuePair<string, object?>("error_type", errorType));
         }
 
-        PlanExecutionErrors.Add(1, tags);
+        if (tags.Count > 0)
+        {
+            PlanExecutionErrors.Add(1, tags.ToArray());
+        }
+        else
+        {
+            PlanExecutionErrors.Add(1);
+        }
     }
 
     // Helper method to record error by severity
     public static void RecordErrorBySeverity(string severity, string? errorType = null)
     {
-        var tags = new TagList { { "severity", severity } };
         if (!string.IsNullOrEmpty(errorType))
         {
-            tags.Add("error_type", errorType);
+            ErrorsBySeverity.Add(1, new KeyValuePair<string, object?>("severity", severity),
+                new KeyValuePair<string, object?>("error_type", errorType));
         }
-
-        ErrorsBySeverity.Add(1, tags);
+        else
+        {
+            ErrorsBySeverity.Add(1, new KeyValuePair<string, object?>("severity", severity));
+        }
     }
 
     // Helper method to record model failure
     public static void RecordModelFailure(string model, string? reason = null)
     {
-        var tags = new TagList { { "model", model } };
         if (!string.IsNullOrEmpty(reason))
         {
-            tags.Add("reason", reason);
+            ModelFailures.Add(1, new KeyValuePair<string, object?>("model", model),
+                new KeyValuePair<string, object?>("reason", reason));
+        }
+        else
+        {
+            ModelFailures.Add(1, new KeyValuePair<string, object?>("model", model));
         }
 
-        ModelFailures.Add(1, tags);
-        ModelFailuresByModel.Add(1, new TagList { { "model", model } });
+        ModelFailuresByModel.Add(1, new KeyValuePair<string, object?>("model", model));
     }
 }
 

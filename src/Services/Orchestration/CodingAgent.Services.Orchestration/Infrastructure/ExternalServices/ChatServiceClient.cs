@@ -9,6 +9,44 @@ using Microsoft.Extensions.Logging;
 namespace CodingAgent.Services.Orchestration.Infrastructure.ExternalServices;
 
 /// <summary>
+/// DTO for conversation messages from Chat Service
+/// </summary>
+public record ConversationMessageDto
+{
+    public Guid Id { get; init; }
+    public string Role { get; init; } = string.Empty;
+    public string Content { get; init; } = string.Empty;
+    public DateTime SentAt { get; init; }
+}
+
+/// <summary>
+/// Response DTO from Chat Service messages endpoint
+/// </summary>
+internal record PagedMessagesResponse
+{
+    public List<MessageDto> Items { get; init; } = new();
+    public string? NextCursor { get; init; }
+}
+
+internal record MessageDto
+{
+    public Guid Id { get; init; }
+    public Guid ConversationId { get; init; }
+    public string Role { get; init; } = string.Empty;
+    public string Content { get; init; } = string.Empty;
+    public DateTime SentAt { get; init; }
+    public List<AttachmentDto> Attachments { get; init; } = new();
+}
+
+internal record AttachmentDto
+{
+    public Guid Id { get; init; }
+    public string FileName { get; init; } = string.Empty;
+    public string ContentType { get; init; } = string.Empty;
+    public string StorageUrl { get; init; } = string.Empty;
+}
+
+/// <summary>
 /// HTTP client for Chat Service.
 /// Handles posting AI agent responses back to chat conversations.
 /// </summary>
@@ -35,6 +73,69 @@ public class ChatServiceClient
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _activitySource = activitySource ?? throw new ArgumentNullException(nameof(activitySource));
         _tokenGenerator = tokenGenerator ?? throw new ArgumentNullException(nameof(tokenGenerator));
+    }
+
+    /// <summary>
+    /// Gets conversation history for context (service-to-service call).
+    /// </summary>
+    public async Task<IEnumerable<ConversationMessageDto>> GetConversationHistoryAsync(
+        Guid conversationId,
+        int maxMessages = 10,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("ChatServiceClient.GetConversationHistory");
+        activity?.SetTag("conversation.id", conversationId);
+        activity?.SetTag("max.messages", maxMessages);
+
+        try
+        {
+            _logger.LogInformation(
+                "Getting conversation history for conversation {ConversationId} (max {MaxMessages} messages)",
+                conversationId, maxMessages);
+
+            // Generate service token for authentication
+            var serviceToken = _tokenGenerator.GenerateServiceToken();
+            
+            // Create request message to add authorization header
+            // Use internal service endpoint that bypasses user ownership check
+            using var requestMessage = new HttpRequestMessage(
+                HttpMethod.Get, 
+                $"/conversations/{conversationId}/messages/history?limit={maxMessages}");
+            
+            // Add JWT token if available
+            if (!string.IsNullOrEmpty(serviceToken))
+            {
+                requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", serviceToken);
+                _logger.LogDebug("Added JWT Bearer token to Chat Service request");
+            }
+            
+            var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
+            
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("Conversation {ConversationId} not found", conversationId);
+                return Enumerable.Empty<ConversationMessageDto>();
+            }
+            
+            response.EnsureSuccessStatusCode();
+            
+            var result = await response.Content.ReadFromJsonAsync<PagedMessagesResponse>(JsonOptions, cancellationToken);
+            
+            // Convert to simple DTO format
+            return result?.Items.Select(m => new ConversationMessageDto
+            {
+                Id = m.Id,
+                Role = m.Role,
+                Content = m.Content,
+                SentAt = m.SentAt
+            }) ?? Enumerable.Empty<ConversationMessageDto>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get conversation history for {ConversationId}, continuing without context", conversationId);
+            // Don't fail the entire request if we can't get history - just continue without context
+            return Enumerable.Empty<ConversationMessageDto>();
+        }
     }
 
     /// <summary>

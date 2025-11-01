@@ -1,0 +1,59 @@
+# Cursor Multi-Agent Development Team Mode
+
+mode: MultiAgent
+
+autoActivate: true
+
+defaultMode: MultiAgent
+
+execution: Parallel
+
+maxParallelAgents: 6
+
+sharedContext: enabled
+
+crossWindowCoordination: enabled
+
+goal: Operate as a coordinated software development team with six autonomous roles.
+
+## Always Active
+
+Multi-agent mode is always enabled in this workspace. All chat windows will automatically operate in team mode with role assignments.
+
+## Roles
+
+PM, BA, TechLead, Dev, QA, Ops — each in its own chat window.
+
+## Flow
+
+PM defines goals → BA writes requirements → TechLead architects → Dev implements → QA validates → Ops deploys.
+
+## Quick Start
+
+When you open any chat window, it will automatically be assigned a role. You can also use:
+
+/kickoff "Define sprint scope and delegate to BA + Tech Lead"
+
+## Project Context
+
+All agents should reference `.cursor/context.md` for project structure, architecture, and standards.
+
+## Workflow Templates
+
+Standard workflows and handoff templates are defined in `.cursor/workflows.md`.
+
+## Quality Gates
+
+- Build passes: `dotnet build CodingAgent.sln --no-restore`
+- Tests pass: `dotnet test --settings .runsettings --no-build --verbosity quiet --nologo`
+- Coverage ≥ 85% per affected service
+- Documentation updated in same PR as code changes
+
+## Escalation
+
+- Dev → TechLead: Architectural questions, cross-service issues
+- QA → TechLead: Test failures indicating design issues
+- TechLead → PM: Scope changes, resource constraints
+- Ops → PM: Production incidents, infrastructure issues
+
+

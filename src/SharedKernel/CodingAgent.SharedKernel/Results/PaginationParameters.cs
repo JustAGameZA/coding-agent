@@ -1,51 +1,34 @@
 namespace CodingAgent.SharedKernel.Results;
 
 /// <summary>
-/// Pagination parameters for querying data
+/// Represents pagination parameters for queries.
 /// </summary>
 public class PaginationParameters
 {
-    private const int MaxPageSize = 100;
-    private const int DefaultPageSize = 50;
-
-    private int _pageNumber = 1;
-    private int _pageSize = DefaultPageSize;
-
-    /// <summary>
-    /// Page number (1-based). Minimum: 1, Default: 1
-    /// </summary>
-    public int PageNumber
-    {
-        get => _pageNumber;
-        set => _pageNumber = value < 1 ? 1 : value;
-    }
-
-    /// <summary>
-    /// Number of items per page. Minimum: 1, Maximum: 100, Default: 50
-    /// </summary>
-    public int PageSize
-    {
-        get => _pageSize;
-        set => _pageSize = value < 1 ? DefaultPageSize : (value > MaxPageSize ? MaxPageSize : value);
-    }
-
-    /// <summary>
-    /// Calculate the number of items to skip
-    /// </summary>
+    public int PageNumber { get; }
+    public int PageSize { get; }
     public int Skip => (PageNumber - 1) * PageSize;
-
-    /// <summary>
-    /// Number of items to take
-    /// </summary>
     public int Take => PageSize;
-
-    public PaginationParameters()
-    {
-    }
 
     public PaginationParameters(int pageNumber, int pageSize)
     {
+        if (pageNumber < 1)
+        {
+            throw new ArgumentException("Page number must be greater than 0", nameof(pageNumber));
+        }
+        
+        if (pageSize < 1)
+        {
+            throw new ArgumentException("Page size must be greater than 0", nameof(pageSize));
+        }
+        
+        if (pageSize > 100)
+        {
+            throw new ArgumentException("Page size cannot exceed 100", nameof(pageSize));
+        }
+
         PageNumber = pageNumber;
         PageSize = pageSize;
     }
 }
+

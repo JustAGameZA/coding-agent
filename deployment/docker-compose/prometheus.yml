@@ -76,6 +76,17 @@ scrape_configs:
     scheme: "http"
 
   # ==========================================
+  # Auth Service
+  # ==========================================
+  - job_name: "auth-service"
+    static_configs:
+      - targets: ["auth-service:8080"]
+        labels:
+          service: "auth"
+    metrics_path: "/metrics"
+    scheme: "http"
+
+  # ==========================================
   # Chat Service
   # ==========================================
   - job_name: "chat-service"

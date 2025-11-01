@@ -1,9 +1,12 @@
 using System.Diagnostics;
 using CodingAgent.Services.Chat.Api.Hubs;
 using CodingAgent.Services.Chat.Domain.Entities;
+using CodingAgent.Services.Chat.Domain.Repositories;
 using CodingAgent.Services.Chat.Domain.Services;
+using CodingAgent.Services.Chat.Infrastructure.Persistence;
 using FluentValidation;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 namespace CodingAgent.Services.Chat.Api.Endpoints;
 
@@ -26,6 +29,14 @@ public static class AgentEndpoints
             .Produces(StatusCodes.Status202Accepted)
             .Produces(StatusCodes.Status404NotFound)
             .ProducesValidationProblem();
+
+        // Service-to-service endpoint for getting conversation history (bypasses user ownership check)
+        group.MapGet("{id:guid}/messages/history", GetConversationHistory)
+            .WithName("GetConversationHistory")
+            .WithSummary("Get conversation history for service-to-service calls")
+            .WithDescription("Called by Orchestration Service to get conversation history for context. Bypasses user ownership check.")
+            .Produces<PagedMessagesResponse>()
+            .Produces(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> PostAgentResponse(
@@ -80,6 +91,53 @@ public static class AgentEndpoints
             logger.LogWarning("Agent response attempted for non-existent conversation {ConversationId}", id);
             return Results.NotFound();
         }
+    }
+
+    private static async Task<IResult> GetConversationHistory(
+        Guid id,
+        IConversationRepository repository,
+        ChatDbContext dbContext,
+        ILogger<Program> logger,
+        int limit = 10,
+        CancellationToken ct = default)
+    {
+        logger.LogInformation("Getting conversation history for service call: conversation {ConversationId} (limit: {Limit})", id, limit);
+
+        // Verify conversation exists
+        var conversation = await repository.GetByIdAsync(id, ct);
+        if (conversation is null)
+        {
+            logger.LogWarning("Conversation {ConversationId} not found", id);
+            return Results.NotFound();
+        }
+
+        // Query messages from database (service-to-service call, no user ownership check)
+        var messages = await dbContext.Messages
+            .Where(m => m.ConversationId == id)
+            .OrderByDescending(m => m.SentAt) // Get most recent messages first
+            .Take(Math.Min(limit, 100)) // Max 100
+            .OrderBy(m => m.SentAt) // Then order by oldest first for context
+            .ToListAsync(ct);
+
+        // Convert to DTOs
+        var messageDtos = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            ConversationId = m.ConversationId,
+            Role = m.Role.ToString(),
+            Content = m.Content,
+            SentAt = m.SentAt,
+            Attachments = new List<AttachmentDto>()
+        }).ToList();
+
+        var response = new PagedMessagesResponse
+        {
+            Items = messageDtos,
+            NextCursor = null // Not needed for service calls
+        };
+
+        logger.LogInformation("Returned {Count} messages for conversation {ConversationId}", messageDtos.Count, id);
+        return Results.Ok(response);
     }
 }
 

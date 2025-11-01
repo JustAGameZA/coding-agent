@@ -48,24 +48,53 @@ public class MessageSentEventConsumer : IConsumer<MessageSentEvent>
                 "Message {MessageId} is a chat message, providing direct response",
                 msg.MessageId);
 
+            // Get conversation history for context
+            var conversationHistory = await _chatServiceClient.GetConversationHistoryAsync(
+                msg.ConversationId, 
+                maxMessages: 10, // Last 10 messages for context
+                context.CancellationToken);
+
+            // Build messages list with conversation history
+            var messages = new List<LlmMessage>
+            {
+                new() { 
+                    Role = "system", 
+                    Content = @"You are a professional coding assistant specialized in software development. Your role is to:
+- Provide detailed, actionable implementation plans when requested
+- Answer technical questions about C#, .NET, Angular, and web development
+- Follow user instructions carefully and stay on topic
+- When asked for 'detailed implementation plan', provide comprehensive step-by-step guides with code examples
+- When asked for follow-ups or clarifications, reference the previous conversation context
+- Keep responses technical, accurate, and well-structured
+- If the user asks for something specific, provide exactly that - do not change topics or provide generic advice" 
+                }
+            };
+
+            // Add conversation history (skip the current message which will be added separately)
+            foreach (var historyMessage in conversationHistory.Where(m => m.Id != msg.MessageId))
+            {
+                messages.Add(new LlmMessage
+                {
+                    Role = historyMessage.Role == "User" ? "user" : "assistant",
+                    Content = historyMessage.Content
+                });
+            }
+
+            // Add current user message
+            messages.Add(new LlmMessage
+            {
+                Role = "user",
+                Content = msg.Content
+            });
+
             // Generate AI response using LLM
             // Use a fast chat model (maps to mistral:latest in Ollama)
             var llmRequest = new LlmRequest
             {
                 Model = "mistral:latest", // Use :latest tag for Ollama models
-                Messages = new List<LlmMessage>
-                {
-                    new() { 
-                        Role = "system", 
-                        Content = "You are a helpful AI assistant. Respond to user messages in a friendly and helpful manner. Keep responses concise and natural." 
-                    },
-                    new() { 
-                        Role = "user", 
-                        Content = msg.Content 
-                    }
-                },
+                Messages = messages,
                 Temperature = 0.7,
-                MaxTokens = 1000
+                MaxTokens = 4000 // Increased for detailed implementation plans
             };
 
             var llmResponse = await _llmClient.GenerateAsync(llmRequest, context.CancellationToken);
