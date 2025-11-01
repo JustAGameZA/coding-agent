@@ -287,6 +287,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
+        .AddMeter("CodingAgent.Services.Orchestration.Errors")
         .AddPrometheusExporter());
 
 // MassTransit + RabbitMQ with event publishing configuration (enabled only when configured)

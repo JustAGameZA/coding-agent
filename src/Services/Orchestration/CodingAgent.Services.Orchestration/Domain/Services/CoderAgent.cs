@@ -151,7 +151,7 @@ public class CoderAgent : ICoderAgent
                 {
                     ModelName = modelName,
                     TaskType = taskType,
-                    Complexity = complexity,
+                    Complexity = (Domain.ValueObjects.TaskComplexity)(int)complexity, // Convert enum
                     Success = changes.Count > 0, // Consider successful if changes were generated
                     TokensUsed = response.TokensUsed,
                     Cost = response.Cost,

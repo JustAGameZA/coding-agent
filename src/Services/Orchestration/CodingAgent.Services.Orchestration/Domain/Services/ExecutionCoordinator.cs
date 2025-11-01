@@ -186,6 +186,18 @@ public class ExecutionCoordinator : IExecutionCoordinator
                 execution.Fail(error);
                 await executionRepository.UpdateAsync(execution, ct);
 
+                // Record error metrics
+                var strategyName = execution.Strategy.ToString();
+                var taskType = task.Type?.ToString() ?? "unknown";
+                ErrorMetrics.RecordTaskExecutionError(strategyName, taskType, "execution_failure");
+                ErrorMetrics.RecordErrorBySeverity("error", "task_execution");
+                
+                // Record model failure if applicable
+                if (!string.IsNullOrEmpty(execution.ModelUsed))
+                {
+                    ErrorMetrics.RecordModelFailure(execution.ModelUsed, error);
+                }
+
                 await taskService.FailTaskAsync(
                     task.Id,
                     execution.Strategy,
@@ -201,6 +213,31 @@ public class ExecutionCoordinator : IExecutionCoordinator
         catch (Exception ex)
         {
             _logger.LogError(ex, "Execution failed with exception for task {TaskId}", taskId);
+            
+            // Record error metrics
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var taskRepository = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
+                var task = await taskRepository.GetByIdAsync(taskId, ct);
+                var executionRepository = scope.ServiceProvider.GetRequiredService<IExecutionRepository>();
+                var execution = await executionRepository.GetByIdAsync(executionId, ct);
+                
+                if (task != null && execution != null)
+                {
+                    var strategyName = execution.Strategy.ToString();
+                    var taskType = task.Type?.ToString() ?? "unknown";
+                    ErrorMetrics.RecordTaskExecutionError(strategyName, taskType, "exception");
+                    ErrorMetrics.RecordErrorBySeverity("critical", ex.GetType().Name);
+                    
+                    if (!string.IsNullOrEmpty(execution.ModelUsed))
+                    {
+                        ErrorMetrics.RecordModelFailure(execution.ModelUsed, ex.Message);
+                    }
+                }
+            }
+            catch { /* Best effort metrics */ }
+            
             // Best-effort logging
             try { await _logService.WriteAsync(executionId, $"status:failed error={Escape(ex.Message)}", ct); } catch {}
         }
@@ -257,6 +294,11 @@ public class ExecutionCoordinator : IExecutionCoordinator
         catch (Exception ex)
         {
             _logger.LogError(ex, "Plan execution failed for task {TaskId}", taskId);
+            
+            // Record error metrics
+            ErrorMetrics.RecordPlanExecutionError(plan.Id.ToString(), ex.GetType().Name);
+            ErrorMetrics.RecordErrorBySeverity("error", "plan_execution");
+            
             await _logService.WriteAsync(executionId, $"status:plan_failed error={Escape(ex.Message)}", ct);
         }
     }
