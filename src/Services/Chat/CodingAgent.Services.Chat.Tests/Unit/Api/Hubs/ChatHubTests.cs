@@ -1,5 +1,6 @@
 using CodingAgent.Services.Chat.Api.Hubs;
 using CodingAgent.Services.Chat.Domain.Entities;
+using CodingAgent.Services.Chat.Domain.Repositories;
 using CodingAgent.Services.Chat.Domain.Services;
 using CodingAgent.SharedKernel.Domain.Events;
 using FluentAssertions;
@@ -17,6 +18,7 @@ public class ChatHubTests
 {
     private readonly TestLogger<ChatHub> _testLogger;
     private readonly Mock<IConversationService> _conversationServiceMock;
+    private readonly Mock<IConversationRepository> _conversationRepositoryMock;
     private readonly Mock<IPublishEndpoint> _publishEndpointMock;
     private readonly Mock<HubCallerContext> _contextMock;
     private readonly Mock<IHubCallerClients> _clientsMock;
@@ -32,6 +34,7 @@ public class ChatHubTests
     {
         _testLogger = new TestLogger<ChatHub>();
         _conversationServiceMock = new Mock<IConversationService>();
+        _conversationRepositoryMock = new Mock<IConversationRepository>();
         _publishEndpointMock = new Mock<IPublishEndpoint>();
         _contextMock = new Mock<HubCallerContext>();
         _clientsMock = new Mock<IHubCallerClients>();
@@ -56,7 +59,7 @@ public class ChatHubTests
         _clientsMock.Setup(c => c.OthersInGroup(It.IsAny<string>())).Returns(_clientProxyMock.Object);
 
         // Create ChatHub instance
-        _chatHub = new ChatHub(_conversationServiceMock.Object, _publishEndpointMock.Object, _testLogger)
+        _chatHub = new ChatHub(_conversationServiceMock.Object, _conversationRepositoryMock.Object, _publishEndpointMock.Object, _testLogger)
         {
             Context = _contextMock.Object,
             Clients = _clientsMock.Object,
@@ -92,7 +95,7 @@ public class ChatHubTests
     public void Constructor_WithValidParameters_ShouldCreateInstance()
     {
         // Arrange & Act
-        var hub = new ChatHub(_conversationServiceMock.Object, _publishEndpointMock.Object, _testLogger);
+        var hub = new ChatHub(_conversationServiceMock.Object, _conversationRepositoryMock.Object, _publishEndpointMock.Object, _testLogger);
 
         // Assert
         hub.Should().NotBeNull();
