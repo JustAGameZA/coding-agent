@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
@@ -8,15 +8,23 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialogModule, MatDialog } from '@angular/material/dialog';
+import { MatSelectModule } from '@angular/material/select';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
 import { ReflectionPanelComponent } from './components/reflection-panel.component';
 import { PlanningProgressComponent } from './components/planning-progress.component';
 import { FeedbackSubmitComponent } from './components/feedback-submit.component';
 import { MemoryContextComponent } from './components/memory-context.component';
 import { ThinkingProcessComponent } from './components/thinking-process.component';
 import { DashboardService } from '../../core/services/dashboard.service';
+import { TaskService } from '../../core/services/task.service';
+import { NotificationService } from '../../core/services/notifications/notification.service';
 import { AgenticBadgeComponent } from '../../shared/components/agentic-badge.component';
 import { StatusChipComponent } from '../../shared/components/status-chip.component';
 import { LoadingStateComponent } from '../../shared/components/loading-state.component';
+import { TaskDetailDto, ExecutionStrategy } from '../../core/models/task.models';
 
 @Component({
   selector: 'app-task-detail',
@@ -31,6 +39,11 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
     MatButtonModule,
     MatProgressSpinnerModule,
     MatDividerModule,
+    MatDialogModule,
+    MatSelectModule,
+    MatFormFieldModule,
+    MatTooltipModule,
+    MatMenuModule,
     ReflectionPanelComponent,
     PlanningProgressComponent,
     FeedbackSubmitComponent,
@@ -66,6 +79,71 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
             </mat-chip>
           </div>
           <p class="task-description">{{ task()?.description }}</p>
+          
+          <!-- Action Buttons -->
+          <div class="task-actions" *ngIf="task()">
+            <button 
+              *ngIf="canExecute()"
+              mat-raised-button 
+              color="primary" 
+              (click)="executeTask()"
+              [disabled]="executing()"
+              [attr.data-testid]="'execute-task-button'">
+              <mat-icon>play_arrow</mat-icon>
+              Execute Task
+            </button>
+            
+            <button 
+              *ngIf="canCancel()"
+              mat-stroked-button 
+              color="warn" 
+              (click)="cancelTask()"
+              [disabled]="executing()"
+              [attr.data-testid]="'cancel-task-button'">
+              <mat-icon>stop</mat-icon>
+              Cancel
+            </button>
+            
+            <button 
+              *ngIf="canRetry()"
+              mat-stroked-button 
+              color="primary" 
+              (click)="retryTask()"
+              [disabled]="executing()"
+              [attr.data-testid]="'retry-task-button'">
+              <mat-icon>refresh</mat-icon>
+              Retry
+            </button>
+            
+            <button 
+              *ngIf="canExecute()"
+              mat-icon-button 
+              [matMenuTriggerFor]="strategyMenu"
+              [disabled]="executing()"
+              matTooltip="Execution Strategy"
+              [attr.data-testid]="'strategy-menu-button'">
+              <mat-icon>settings</mat-icon>
+            </button>
+            
+            <mat-menu #strategyMenu="matMenu">
+              <button mat-menu-item (click)="executeTaskWithStrategy('SingleShot')">
+                <mat-icon>flash_on</mat-icon>
+                <span>Single Shot (Fast)</span>
+              </button>
+              <button mat-menu-item (click)="executeTaskWithStrategy('Iterative')">
+                <mat-icon>repeat</mat-icon>
+                <span>Iterative (Recommended)</span>
+              </button>
+              <button mat-menu-item (click)="executeTaskWithStrategy('MultiAgent')">
+                <mat-icon>group_work</mat-icon>
+                <span>Multi-Agent (Complex)</span>
+              </button>
+              <button mat-menu-item (click)="executeTaskWithStrategy('HybridExecution')">
+                <mat-icon>all_inclusive</mat-icon>
+                <span>Hybrid (Advanced)</span>
+              </button>
+            </mat-menu>
+          </div>
         </mat-card-content>
       </mat-card>
 
@@ -73,17 +151,17 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
         <!-- Overview Tab -->
         <mat-tab label="Overview">
           <div class="tab-content">
-            <mat-card *ngIf="task()?.executionId" class="execution-info">
+            <mat-card *ngIf="getCurrentExecutionId()" class="execution-info">
               <mat-card-header>
                 <mat-icon>play_circle</mat-icon>
                 <mat-card-title>Execution Information</mat-card-title>
               </mat-card-header>
               <mat-card-content>
-                <p>Execution ID: {{ task()?.executionId }}</p>
+                <p>Execution ID: {{ getCurrentExecutionId() }}</p>
                 <button 
                   mat-stroked-button 
                   (click)="loadReflection()"
-                  *ngIf="task()?.executionId">
+                  *ngIf="getCurrentExecutionId()">
                   <mat-icon>psychology</mat-icon>
                   View Reflection
                 </button>
@@ -103,8 +181,8 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
         <mat-tab label="Reflection">
           <div class="tab-content">
             <app-reflection-panel 
-              [executionId]="task()?.executionId || ''" 
-              *ngIf="task()?.executionId">
+              [executionId]="getCurrentExecutionId() || ''" 
+              *ngIf="getCurrentExecutionId()">
             </app-reflection-panel>
           </div>
         </mat-tab>
@@ -124,7 +202,7 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
           <div class="tab-content">
             <app-feedback-submit 
               [taskId]="taskId()!"
-              [executionId]="task()?.executionId"
+              [executionId]="getCurrentExecutionId()"
               (feedbackSubmitted)="onFeedbackSubmitted()"
               *ngIf="taskId()">
             </app-feedback-submit>
@@ -136,7 +214,7 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
     <app-loading-state 
       *ngIf="loading()" 
       mode="spinner" 
-      size="60"
+      [size]="60"
       message="Loading task details...">
     </app-loading-state>
   `,
@@ -232,6 +310,15 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
       margin-bottom: 24px;
     }
 
+    .task-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
     .loading-overlay {
       display: flex;
       justify-content: center;
@@ -242,12 +329,14 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
 })
 export class TaskDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
-  private dashboardService = inject(DashboardService);
-  private router = inject(RouterModule);
+  private router = inject(Router);
+  private taskService = inject(TaskService);
+  private notificationService = inject(NotificationService);
 
   taskId = signal<string | null>(null);
-  task = signal<any>(null); // TODO: Use proper Task type
+  task = signal<TaskDetailDto | null>(null);
   loading = signal<boolean>(false);
+  executing = signal<boolean>(false);
   hasAgenticFeatures = signal<boolean>(false);
 
   ngOnInit() {
@@ -261,24 +350,23 @@ export class TaskDetailComponent implements OnInit {
   }
 
   private loadTask() {
+    const id = this.taskId();
+    if (!id) return;
+
     this.loading.set(true);
-    // TODO: Load task from service using taskId
-    // For now, create a mock task
-    this.task.set({
-      id: this.taskId(),
-      title: 'Sample Task',
-      description: 'Task description here',
-      status: 'Running',
-      type: 'Feature',
-      complexity: 'High',
-      duration: 120000,
-      executionId: 'exec-' + this.taskId()
+    
+    this.taskService.getTask(id).subscribe({
+      next: (task) => {
+        this.task.set(task);
+        this.checkAgenticFeatures();
+        this.loading.set(false);
+      },
+      error: (err) => {
+        this.notificationService.error('Failed to load task details');
+        console.error('Task load error:', err);
+        this.loading.set(false);
+      }
     });
-    
-    // Check if task has agentic features
-    this.checkAgenticFeatures();
-    
-    setTimeout(() => this.loading.set(false), 500);
   }
 
   private checkAgenticFeatures() {
@@ -307,6 +395,91 @@ export class TaskDetailComponent implements OnInit {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
+  }
+
+  canExecute(): boolean {
+    const status = this.task()?.status?.toLowerCase();
+    return status === 'pending' || status === 'failed' || status === 'cancelled';
+  }
+
+  canCancel(): boolean {
+    return this.task()?.status?.toLowerCase() === 'inprogress';
+  }
+
+  canRetry(): boolean {
+    return this.task()?.status?.toLowerCase() === 'failed';
+  }
+
+  executeTask(strategy?: ExecutionStrategy): void {
+    const id = this.taskId();
+    if (!id) return;
+
+    this.executing.set(true);
+    
+    this.taskService.executeTask(id, strategy ? { strategy } : undefined).subscribe({
+      next: (response) => {
+        this.notificationService.success(`Task execution started with ${response.strategy} strategy`);
+        // Reload task to show updated status
+        this.loadTask();
+        this.executing.set(false);
+      },
+      error: (err) => {
+        this.notificationService.error(err.message || 'Failed to execute task');
+        this.executing.set(false);
+      }
+    });
+  }
+
+  executeTaskWithStrategy(strategy: ExecutionStrategy): void {
+    this.executeTask(strategy);
+  }
+
+  cancelTask(): void {
+    const id = this.taskId();
+    if (!id) return;
+
+    this.executing.set(true);
+    
+    this.taskService.cancelTask(id).subscribe({
+      next: () => {
+        this.notificationService.success('Task cancelled successfully');
+        this.loadTask();
+        this.executing.set(false);
+      },
+      error: (err) => {
+        this.notificationService.error(err.message || 'Failed to cancel task');
+        this.executing.set(false);
+      }
+    });
+  }
+
+  retryTask(): void {
+    const id = this.taskId();
+    if (!id) return;
+
+    this.executing.set(true);
+    
+    this.taskService.retryTask(id).subscribe({
+      next: (response) => {
+        this.notificationService.success(`Task retry started with ${response.strategy} strategy`);
+        this.loadTask();
+        this.executing.set(false);
+      },
+      error: (err) => {
+        this.notificationService.error(err.message || 'Failed to retry task');
+        this.executing.set(false);
+      }
+    });
+  }
+
+  getCurrentExecutionId(): string | undefined {
+    const executions = this.task()?.executions;
+    if (executions && executions.length > 0) {
+      // Return the most recent execution (last in array or first with Running status)
+      const runningExecution = executions.find(e => e.status === 'Running');
+      return runningExecution?.id || executions[executions.length - 1]?.id;
+    }
+    return undefined;
   }
 }
 

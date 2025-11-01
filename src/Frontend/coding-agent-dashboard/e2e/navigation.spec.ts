@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAngular, mockTasksAPI } from './fixtures';
+import { waitForAngular } from './fixtures';
 
 /**
  * Navigation E2E Tests
@@ -19,7 +19,7 @@ test.describe('Application Navigation', () => {
   });
   
   test('should navigate to tasks', async ({ page }) => {
-    await mockTasksAPI(page); // Add mock for tasks API
+    // Uses real API - no mocking
     await page.goto('/tasks');
     await waitForAngular(page);
     
@@ -136,9 +136,7 @@ test.describe('Browser Navigation', () => {
   });
   
   test('should handle direct URL navigation', async ({ page }) => {
-    // Set up mock before navigation
-    await mockTasksAPI(page);
-    
+    // Uses real API - no mocking
     // Navigate directly to tasks via URL
     await page.goto('http://localhost:4200/tasks');
     await waitForAngular(page);

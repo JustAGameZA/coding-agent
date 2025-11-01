@@ -11,11 +11,13 @@ import { DashboardService } from '../../core/services/dashboard.service';
 import { DashboardStats } from '../../core/models/dashboard.models';
 import { NotificationService } from '../../core/services/notifications/notification.service';
 import { formatDuration as formatDurationUtil } from '../../shared/utils/time.utils';
+import { LoadingStateComponent } from '../../shared/components/loading-state.component';
+import { ErrorStateComponent } from '../../shared/components/error-state.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, RouterModule, MatButtonModule],
+  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, RouterModule, MatButtonModule, LoadingStateComponent, ErrorStateComponent],
   template: `
     <div class="dashboard-container" [attr.data-testid]="'dashboard-root'">
       <h1 [attr.data-testid]="'dashboard-title'">
@@ -33,7 +35,7 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
       <app-loading-state 
         *ngIf="loading()" 
         mode="spinner" 
-        size="60"
+        [size]="60"
         message="Loading dashboard...">
       </app-loading-state>
 
@@ -41,6 +43,7 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
         *ngIf="error()"
         [message]="error()!"
         [showBack]="false"
+        [showRetry]="true"
         (onRetry)="loadStats()">
       </app-error-state>
 
@@ -253,7 +256,7 @@ export class DashboardComponent {
       });
   }
 
-  private loadStats(silent = false) {
+  loadStats(silent = false) {
     if (!silent) {
       this.loading.set(true);
     }

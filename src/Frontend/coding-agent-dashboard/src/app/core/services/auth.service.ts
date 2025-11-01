@@ -44,6 +44,7 @@ export class AuthService {
     const token = this.getStoredToken();
     if (token && !this.isTokenExpired(token)) {
       this.tokenSubject.next(token);
+      this.authenticatedSignal.set(true);
       
       // Decode token to extract user info
       const decoded = this.decodeToken(token);
@@ -58,6 +59,8 @@ export class AuthService {
         this.userSignal.set(user);
         this.setupAutoRefresh(token);
       }
+    } else {
+      this.authenticatedSignal.set(false);
     }
   }
 
@@ -113,14 +116,31 @@ export class AuthService {
   }
 
   /**
+   * Authentication state as a signal for reactive updates
+   */
+  private readonly authenticatedSignal = signal<boolean>(false);
+  
+  /**
+   * Get authentication state as signal (for reactive templates)
+   */
+  get isAuthenticatedSignal() {
+    return this.authenticatedSignal.asReadonly();
+  }
+  
+  /**
    * Check if user is authenticated (has valid token)
    */
   isAuthenticated(): boolean {
     const token = this.getToken();
-    if (!token) return false;
+    if (!token) {
+      this.authenticatedSignal.set(false);
+      return false;
+    }
     
     // Check if token is expired
-    return !this.isTokenExpired(token);
+    const authenticated = !this.isTokenExpired(token);
+    this.authenticatedSignal.set(authenticated);
+    return authenticated;
   }
 
   /**
@@ -153,6 +173,9 @@ export class AuthService {
     if (token) {
       localStorage.setItem('auth_token', token);
       this.tokenSubject.next(token);
+      // Update authentication signal
+      const authenticated = !this.isTokenExpired(token);
+      this.authenticatedSignal.set(authenticated);
     } else {
       this.clearAuth();
     }
@@ -298,6 +321,7 @@ export class AuthService {
     
     this.tokenSubject.next(null);
     this.userSignal.set(null);
+    this.authenticatedSignal.set(false);
     
     if (this.refreshTimerSubscription) {
       this.refreshTimerSubscription.unsubscribe();

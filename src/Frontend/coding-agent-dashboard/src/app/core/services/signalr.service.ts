@@ -4,6 +4,7 @@ import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 import type { RetryContext } from '@microsoft/signalr';
 import { NotificationService } from './notifications/notification.service';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -36,14 +37,26 @@ export class SignalRService {
       }
     } as signalR.IRetryPolicy;
 
+    const hubUrl = environment.chatHubUrl || environment.signalRUrl;
+    console.log('Initializing SignalR connection to:', hubUrl);
+    
     this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl(environment.chatHubUrl || environment.signalRUrl, {
+      .withUrl(hubUrl, {
         skipNegotiation: false, // Allow SignalR negotiation through gateway
-        transport: signalR.HttpTransportType.WebSockets,
-        accessTokenFactory: () => this.auth.getToken() || ''
+        // Enable all transports and let SignalR negotiate the best one
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.ServerSentEvents | signalR.HttpTransportType.LongPolling,
+        accessTokenFactory: () => {
+          const token = this.auth.getToken();
+          if (!token) {
+            console.warn('No auth token available for SignalR connection - user may need to login');
+            return '';
+          }
+          console.log('SignalR using access token (length):', token.length);
+          return token;
+        }
       })
       .withAutomaticReconnect(retryPolicy)
-      .configureLogging(signalR.LogLevel.Information)
+      .configureLogging(signalR.LogLevel.Information) // Use Information level to reduce console spam
       .build();
 
     // Connection state handlers
@@ -53,10 +66,11 @@ export class SignalRService {
       this.notify.info('Connection lost. Reconnecting...');
     });
 
-    this.hubConnection.onreconnected(() => {
+    this.hubConnection.onreconnected((connectionId) => {
       this.connectionState.set(signalR.HubConnectionState.Connected);
       this.isConnected.set(true);
       this.nextRetryDelayMs.set(null);
+      console.log('SignalR reconnected with connectionId:', connectionId);
       this.notify.info('Reconnected');
     });
 
@@ -64,9 +78,11 @@ export class SignalRService {
       this.connectionState.set(signalR.HubConnectionState.Disconnected);
       this.isConnected.set(false);
       this.nextRetryDelayMs.set(null);
-      this.notify.error('Disconnected from chat');
       if (err) {
         console.error('SignalR closed with error', err);
+        this.notify.error(`Disconnected from chat: ${err.message || 'Connection closed'}`);
+      } else {
+        this.notify.info('Disconnected from chat');
       }
     });
   }
@@ -79,16 +95,74 @@ export class SignalRService {
       this.initializeConnection();
     }
 
-    if (this.hubConnection!.state === signalR.HubConnectionState.Disconnected) {
+    const currentState = this.hubConnection!.state;
+    console.log('SignalR connection state before connect:', currentState);
+    
+    // Check if user is authenticated before attempting connection
+    const token = this.auth.getToken();
+    if (!token) {
+      console.warn('No authentication token available. User must login first.');
+      this.connectionState.set(signalR.HubConnectionState.Disconnected);
+      this.isConnected.set(false);
+      this.notify.error('Please login to connect to chat');
+      return;
+    }
+    
+    if (currentState === signalR.HubConnectionState.Disconnected) {
       try {
+        const url = environment.chatHubUrl || environment.signalRUrl;
+        console.log('Attempting to connect to SignalR hub:', url);
+        console.log('Using auth token (length):', token.length);
+        
         await this.hubConnection!.start();
+        
         this.connectionState.set(signalR.HubConnectionState.Connected);
         this.isConnected.set(true);
-        console.log('SignalR connected successfully');
-      } catch (error) {
+        this.nextRetryDelayMs.set(null);
+        
+        console.log('SignalR connected successfully. ConnectionId:', this.hubConnection!.connectionId);
+        this.notify.info('Connected to chat');
+      } catch (error: any) {
         console.error('Error connecting to SignalR hub:', error);
+        this.connectionState.set(signalR.HubConnectionState.Disconnected);
+        this.isConnected.set(false);
+        
+        let errorMessage = 'Failed to connect to chat service';
+        if (error?.statusCode === 401 || error?.message?.includes('401')) {
+          errorMessage = 'Authentication failed. Please login again.';
+          // Token might be expired - try to refresh
+          console.log('Authentication failed, attempting token refresh...');
+          try {
+            const newToken = await firstValueFrom(this.auth.refreshToken());
+            if (newToken) {
+              // Reinitialize connection with new token
+              this.initializeConnection();
+              // Retry connection after refresh
+              console.log('Token refreshed, retrying connection...');
+              await this.hubConnection!.start();
+              this.connectionState.set(signalR.HubConnectionState.Connected);
+              this.isConnected.set(true);
+              this.notify.info('Connected to chat');
+              return;
+            }
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            errorMessage = 'Session expired. Please login again.';
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
+        this.notify.error(errorMessage);
         throw error;
       }
+    } else if (currentState === signalR.HubConnectionState.Connected) {
+      console.log('SignalR already connected');
+      // Ensure signals are set correctly even if already connected
+      this.connectionState.set(signalR.HubConnectionState.Connected);
+      this.isConnected.set(true);
+    } else {
+      console.log('SignalR connection in progress, state:', currentState);
     }
   }
 

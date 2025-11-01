@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, signal } from '@angular/core';
+import { Component, EventEmitter, Output, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -32,7 +32,7 @@ import { ConversationDto } from '../../../core/models/chat.models';
     .loading { display: flex; align-items: center; justify-content: center; padding: 12px; }
   `]
 })
-export class ConversationListComponent {
+export class ConversationListComponent implements OnInit {
   @Output() conversationSelected = new EventEmitter<ConversationDto>();
 
   conversations = signal<ConversationDto[]>([]);
@@ -43,10 +43,14 @@ export class ConversationListComponent {
   ngOnInit() {
     this.chat.listConversations().subscribe({
       next: (data) => {
-        this.conversations.set(data);
+        this.conversations.set(data || []);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false)
+      error: (err) => {
+        console.error('Failed to load conversations:', err);
+        this.conversations.set([]);
+        this.loading.set(false);
+      }
     });
   }
 

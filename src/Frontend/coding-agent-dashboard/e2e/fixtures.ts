@@ -1,9 +1,13 @@
 import { Page } from '@playwright/test';
+import { createConsoleErrorTracker } from './utils/console-error-tracker';
+import type { ConsoleErrorTracker } from './utils/console-error-tracker';
 
 /**
  * Test Fixtures and Helpers
  * Provides mock data and utility functions for E2E tests
  */
+
+// setupAuthenticatedUser and setupAdminSession are defined below in this file
 
 // Mock Dashboard Stats (must match DashboardStats interface)
 export const mockDashboardStats = {
@@ -93,65 +97,12 @@ export const mockMessages = [
 ];
 
 /**
- * Mock API responses for isolated testing
+ * NOTE: All mock API functions have been removed.
+ * Tests now use real backend services.
+ * 
+ * Mock data constants are kept below for reference/comparison purposes only.
+ * They are NOT used to mock API responses.
  */
-export async function mockDashboardAPI(page: Page) {
-  // Mock Dashboard BFF stats endpoint (via Gateway)
-  await page.route('**/api/dashboard/stats', async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(mockDashboardStats)
-    });
-  });
-}
-
-export async function mockTasksAPI(page: Page) {
-  // Mock Dashboard BFF tasks endpoint (via Gateway) - returns array directly, not paginated response
-  await page.route('**/api/dashboard/tasks*', async route => {
-    console.log('MOCKING TASKS API:', route.request().url());
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(mockTasks) // Return array directly, not wrapped in pagination object
-    });
-  });
-}
-
-export async function mockChatAPI(page: Page) {
-  // Mock conversations list - return array directly
-  await page.route('**/api/conversations*', async route => {
-    console.log('MOCKING CHAT API:', route.request().url());
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(mockConversations) // Return array directly
-    });
-  });
-  
-  // Mock messages for a conversation - return PagedResponse format
-  await page.route('**/api/conversations/*/messages*', async route => {
-    console.log('MOCKING MESSAGES API:', route.request().url());
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        items: mockMessages,
-        nextCursor: null
-      })
-    });
-  });
-}
-
-export async function mockAPIError(page: Page, statusCode: number = 500) {
-  await page.route('**/api/**', async route => {
-    await route.fulfill({
-      status: statusCode,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'Internal Server Error' })
-    });
-  });
-}
 
 /**
  * Wait for Angular to be ready
@@ -159,6 +110,20 @@ export async function mockAPIError(page: Page, statusCode: number = 500) {
 export async function waitForAngular(page: Page) {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500); // Small buffer for Angular to stabilize
+}
+
+/**
+ * Setup console error tracking for a test
+ * Returns a tracker that should be checked at the end of the test
+ * Usage:
+ *   const consoleTracker = setupConsoleErrorTracking(page);
+ *   // ... test code ...
+ *   consoleTracker.assertNoErrors('test completion');
+ */
+export function setupConsoleErrorTracking(page: Page): ConsoleErrorTracker {
+  const tracker = createConsoleErrorTracker();
+  tracker.startTracking(page);
+  return tracker;
 }
 
 /**
@@ -209,160 +174,110 @@ export const mockLoginResponse = {
 };
 
 /**
- * Mock Auth API responses for isolated testing
+ * NOTE: mockAuthAPI has been removed.
+ * Tests now use real authentication via setupAuthenticatedUser.
  */
-export async function mockAuthAPI(page: Page) {
-  // Mock successful login
-  await page.route('**/api/auth/login', async route => {
-    const request = route.request();
-    const postData = request.postDataJSON();
-    
-    console.log('MOCKING AUTH LOGIN:', postData);
-    
-    // Check credentials
-    if (postData.username === mockUsers.validUser.username && 
-        postData.password === mockUsers.validUser.password) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(mockLoginResponse)
-      });
-    } else if (postData.username === mockUsers.adminUser.username && 
-               postData.password === mockUsers.adminUser.password) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ...mockLoginResponse,
-          user: {
-            id: '87654321-dcba-4fed-ihgk-vwxyzabcdefg',
-            username: 'admin',
-            email: 'admin@example.com',
-            roles: ['Admin']
-          }
-        })
-      });
-    } else {
-      // Invalid credentials
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ 
-          message: 'Invalid username or password',
-          error: 'Unauthorized'
-        })
-      });
-    }
-  });
-  
-  // Mock successful registration
-  await page.route('**/api/auth/register', async route => {
-    const request = route.request();
-    const postData = request.postDataJSON();
-    
-    console.log('MOCKING AUTH REGISTER:', postData);
-    
-    // Check for duplicate username/email
-    if (postData.username === 'testuser' || postData.email === 'testuser@example.com') {
-      await route.fulfill({
-        status: 409,
-        contentType: 'application/json',
-        body: JSON.stringify({ 
-          message: 'Username or email already exists',
-          error: 'Conflict'
-        })
-      });
-    } else {
-      // Success - return login response
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accessToken: mockJwtToken,
-          refreshToken: mockRefreshToken,
-          expiresIn: 3600,
-          tokenType: 'Bearer',
-          user: {
-            id: postData.username + '-id-mock',
-            username: postData.username,
-            email: postData.email,
-            roles: ['User']
-          }
-        })
-      });
-    }
-  });
-  
-  // Mock token refresh
-  await page.route('**/api/auth/refresh', async route => {
-    const request = route.request();
-    const postData = request.postDataJSON();
-    
-    console.log('MOCKING AUTH REFRESH:', postData);
-    
-    if (postData.refreshToken === mockRefreshToken) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accessToken: mockJwtToken,
-          refreshToken: mockRefreshToken,
-          expiresIn: 3600,
-          tokenType: 'Bearer'
-        })
-      });
-    } else {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ 
-          message: 'Invalid refresh token',
-          error: 'Unauthorized'
-        })
-      });
-    }
-  });
-  
-  // Mock /me endpoint
-  await page.route('**/api/auth/me', async route => {
-    const authHeader = route.request().headers()['authorization'];
-    
-    if (authHeader && authHeader.includes(mockJwtToken)) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(mockLoginResponse.user)
-      });
-    } else {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ 
-          message: 'Unauthorized',
-          error: 'Unauthorized'
-        })
-      });
-    }
-  });
-}
 
 /**
  * Setup authenticated user for tests that require login
- * Sets token in localStorage and mocks API responses
+ * Uses default admin user (username: admin, password: admin)
+ * Creates the user if it doesn't exist
  */
 export async function setupAuthenticatedUser(page: Page) {
-  // Mock auth API
-  await mockAuthAPI(page);
+  const username = 'admin';
+  const password = 'Admin123!'; // Must meet requirements: min 8 chars, uppercase, lowercase, number, special char
+  const email = 'admin@example.com';
+  const gatewayUrl = 'http://localhost:5000';
   
-  // Set auth token in localStorage
-  await page.addInitScript((token) => {
-    localStorage.setItem('auth_token', token);
-  }, mockJwtToken);
+  // First, try to login with admin credentials
+  try {
+    const loginResponse = await page.request.post(`${gatewayUrl}/api/auth/login`, {
+      data: {
+        username: username,
+        password: password,
+        rememberMe: false
+      }
+    });
+    
+    if (loginResponse.ok()) {
+      const loginData = await loginResponse.json();
+      
+      // Store real auth token
+      await page.addInitScript((token, user) => {
+        localStorage.setItem('auth_token', token);
+        if (user) {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+      }, loginData.accessToken || loginData.token, loginData.user);
+      
+      return; // Successfully logged in
+    }
+  } catch (error) {
+    // Login failed, will try to register below
+    console.log('Login failed, attempting to register admin user...');
+  }
   
-  // Also mock the API endpoints that require auth
-  await mockDashboardAPI(page);
-  await mockTasksAPI(page);
-  await mockChatAPI(page);
+  // If login fails, try to register the admin user
+  try {
+    const registerResponse = await page.request.post(`${gatewayUrl}/api/auth/register`, {
+      data: {
+        username: username,
+        email: email,
+        password: password,
+        confirmPassword: password
+      }
+    });
+    
+    if (registerResponse.ok()) {
+      console.log('Admin user registered successfully');
+    } else {
+      const errorText = await registerResponse.text().catch(() => 'Unknown error');
+      // User might already exist, which is okay
+      console.log('Registration response:', registerResponse.status(), errorText);
+    }
+  } catch (error) {
+    // Registration might fail if user exists, which is okay
+    console.log('Registration attempt completed (might have failed if user exists)');
+  }
+  
+  // Try login again after registration attempt
+  try {
+    const retryResponse = await page.request.post(`${gatewayUrl}/api/auth/login`, {
+      data: {
+        username: username,
+        password: password,
+        rememberMe: false
+      }
+    });
+    
+    if (retryResponse.ok()) {
+      const loginData = await retryResponse.json();
+      
+      await page.addInitScript((token, user) => {
+        localStorage.setItem('auth_token', token);
+        if (user) {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+      }, loginData.accessToken || loginData.token, loginData.user);
+      
+      return; // Successfully logged in
+    } else {
+      const errorText = await retryResponse.text().catch(() => 'Unknown error');
+      throw new Error(`Failed to login with admin credentials. Status: ${retryResponse.status()}, Error: ${errorText}`);
+    }
+  } catch (error: any) {
+    throw new Error(`Failed to setup authenticated user: ${error.message || error}`);
+  }
+}
+
+/**
+ * Setup admin user for tests that require admin role
+ * Uses default admin user (username: admin, password: admin)
+ * Creates the user if it doesn't exist
+ */
+export async function setupAdminSession(page: Page) {
+  // Use the same setup as authenticated user (admin is the default)
+  await setupAuthenticatedUser(page);
 }
 
 // Mock SignalR negotiate response
@@ -406,178 +321,11 @@ export const mockSignalRMessages = {
 };
 
 /**
- * Mock SignalR WebSocket connection
- * Intercepts negotiate endpoint and WebSocket upgrade
+ * NOTE: All SignalR mocking functions have been removed.
+ * Tests now use real SignalR connections to the backend.
+ * 
+ * Real SignalR connections require:
+ * - Backend SignalR hub to be running
+ * - WebSocket support in the test environment
+ * - Network connectivity between test and backend
  */
-export async function mockSignalRConnection(page: Page, options?: {
-  simulateFailure?: boolean;
-  delayMs?: number;
-}) {
-  const { simulateFailure = false, delayMs = 0 } = options || {};
-  
-  // Mock SignalR negotiate endpoint
-  await page.route('**/hubs/chat/negotiate**', async route => {
-    console.log('MOCKING SignalR negotiate');
-    
-    if (simulateFailure) {
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Connection failed' })
-      });
-      return;
-    }
-    
-    if (delayMs > 0) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-    
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(mockSignalRNegotiateResponse)
-    });
-  });
-  
-  // Inject mock SignalR WebSocket into the page
-  await page.addInitScript(() => {
-    // Store original WebSocket
-    const OriginalWebSocket = window.WebSocket;
-    
-    // Create mock WebSocket class
-    class MockWebSocket {
-      url: string;
-      readyState: number = 0; // CONNECTING
-      onopen: ((event: Event) => void) | null = null;
-      onclose: ((event: CloseEvent) => void) | null = null;
-      onmessage: ((event: MessageEvent) => void) | null = null;
-      onerror: ((event: Event) => void) | null = null;
-      
-      private messageHandlers: Set<Function> = new Set();
-      
-      static CONNECTING = 0;
-      static OPEN = 1;
-      static CLOSING = 2;
-      static CLOSED = 3;
-      
-      constructor(url: string) {
-        this.url = url;
-        console.log('[MockWebSocket] Created for:', url);
-        
-        // Store instance globally for test access
-        (window as any).__mockWebSocket = this;
-        
-        // Simulate successful connection after 100ms
-        setTimeout(() => {
-          this.readyState = 1; // OPEN
-          if (this.onopen) {
-            this.onopen(new Event('open'));
-          }
-          console.log('[MockWebSocket] Connected');
-        }, 100);
-      }
-      
-      send(data: string) {
-        console.log('[MockWebSocket] Send:', data);
-        try {
-          const parsed = JSON.parse(data);
-          // Store sent messages for test verification
-          if (!(window as any).__signalRSentMessages) {
-            (window as any).__signalRSentMessages = [];
-          }
-          (window as any).__signalRSentMessages.push(parsed);
-        } catch (e) {
-          console.log('[MockWebSocket] Non-JSON message:', data);
-        }
-      }
-      
-      close() {
-        console.log('[MockWebSocket] Close requested');
-        this.readyState = 3; // CLOSED
-        if (this.onclose) {
-          this.onclose(new CloseEvent('close'));
-        }
-      }
-      
-      // Helper method for tests to simulate incoming messages
-      simulateMessage(data: any) {
-        if (this.onmessage) {
-          const messageData = typeof data === 'string' ? data : JSON.stringify(data);
-          this.onmessage(new MessageEvent('message', { data: messageData }));
-        }
-      }
-    }
-    
-    // Replace WebSocket with mock
-    (window as any).WebSocket = MockWebSocket;
-    console.log('[Test] WebSocket mocked successfully');
-  });
-}
-
-/**
- * Simulate incoming SignalR message
- */
-export async function simulateSignalRMessage(page: Page, method: string, ...args: any[]) {
-  await page.evaluate(({ method, args }) => {
-    const ws = (window as any).__mockWebSocket;
-    if (!ws) {
-      throw new Error('MockWebSocket not initialized');
-    }
-    
-    // SignalR message format: {"type":1,"target":"MethodName","arguments":[...]}
-    const signalRMessage = {
-      type: 1, // Invocation message
-      target: method,
-      arguments: args
-    };
-    
-    ws.simulateMessage(JSON.stringify(signalRMessage) + '\x1e');
-    console.log('[Test] Simulated SignalR message:', method, args);
-  }, { method, args });
-}
-
-/**
- * Get messages sent via SignalR from the page
- */
-export async function getSignalRSentMessages(page: Page): Promise<any[]> {
-  return await page.evaluate(() => {
-    return (window as any).__signalRSentMessages || [];
-  });
-}
-
-/**
- * Clear SignalR sent messages
- */
-export async function clearSignalRSentMessages(page: Page) {
-  await page.evaluate(() => {
-    (window as any).__signalRSentMessages = [];
-  });
-}
-
-/**
- * Simulate SignalR connection drop
- */
-export async function simulateSignalRDisconnect(page: Page) {
-  await page.evaluate(() => {
-    const ws = (window as any).__mockWebSocket;
-    if (ws && ws.onclose) {
-      ws.readyState = 3; // CLOSED
-      ws.onclose(new CloseEvent('close'));
-      console.log('[Test] Simulated disconnect');
-    }
-  });
-}
-
-/**
- * Simulate SignalR reconnection
- */
-export async function simulateSignalRReconnect(page: Page) {
-  await page.evaluate(() => {
-    const ws = (window as any).__mockWebSocket;
-    if (ws && ws.onopen) {
-      ws.readyState = 1; // OPEN
-      ws.onopen(new Event('open'));
-      console.log('[Test] Simulated reconnect');
-    }
-  });
-}

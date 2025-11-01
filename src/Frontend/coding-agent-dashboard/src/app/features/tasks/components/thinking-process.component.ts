@@ -5,8 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatTimelineModule } from '@angular/material/timeline';
-import { AgenticAiService, ThinkingProcess, Thought } from '../../../../core/services/agentic-ai.service';
+import { AgenticAiService, ThinkingProcess, Thought } from '../../../core/services/agentic-ai.service';
 
 @Component({
   selector: 'app-thinking-process',
@@ -334,11 +333,11 @@ export class ThinkingProcessComponent {
   private loadProcess() {
     this.loading.set(true);
     this.agenticAiService.getThinkingProcess(this.processId).subscribe({
-      next: (result) => {
+      next: (result: ThinkingProcess) => {
         this.process.set(result);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to load thinking process:', err);
         this.loading.set(false);
       }
@@ -358,7 +357,8 @@ export class ThinkingProcessComponent {
   getDuration(): string {
     if (!this.process()) return 'N/A';
     const start = new Date(this.process()!.startTime);
-    const end = this.process()!.endTime ? new Date(this.process()!.endTime) : new Date();
+    const endTime = this.process()!.endTime;
+    const end = endTime ? new Date(endTime) : new Date();
     const ms = end.getTime() - start.getTime();
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -389,11 +389,13 @@ export class ThinkingProcessComponent {
     return 'low';
   }
 
-  formatTime(timestamp: string): string {
+  formatTime(timestamp: string | undefined): string {
+    if (!timestamp) return 'N/A';
     return new Date(timestamp).toLocaleTimeString();
   }
 
-  formatDate(date: string): string {
+  formatDate(date: string | undefined): string {
+    if (!date) return 'N/A';
     return new Date(date).toLocaleString();
   }
 }

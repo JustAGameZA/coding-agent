@@ -10,8 +10,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
-import { AgenticAiService, FeedbackRequest } from '../../../../core/services/agentic-ai.service';
-import { AuthService } from '../../../../core/services/auth.service';
+import { AgenticAiService, FeedbackRequest } from '../../../core/services/agentic-ai.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-feedback-submit',
@@ -219,7 +219,7 @@ export class FeedbackSubmitComponent {
         this.feedbackSubmitted.emit();
         this.submitting.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to submit feedback:', err);
         this.snackBar.open('Failed to submit feedback. Please try again.', 'Close', { duration: 3000 });
         this.submitting.set(false);

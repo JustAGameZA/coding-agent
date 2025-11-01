@@ -19,5 +19,10 @@ export const adminRoutes: Routes = [
     path: 'users',
     loadComponent: () => import('./users/user-list.component').then(m => m.UserListComponent),
     canActivate: [roleGuard('Admin')]
+  },
+  {
+    path: 'config',
+    loadComponent: () => import('./config/config.component').then(m => m.ConfigComponent),
+    canActivate: [roleGuard('Admin')]
   }
 ];

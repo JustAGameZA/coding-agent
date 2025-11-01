@@ -35,6 +35,13 @@ builder.Services.AddDbContext<ChatDbContext>(options =>
         // Use PostgreSQL when a connection string is explicitly provided
         // Column names configured manually in ChatDbContext using HasColumnName
         options.UseNpgsql(connectionString);
+        
+        // Suppress pending model changes warning in development to allow migrations to apply
+        if (!builder.Environment.IsProduction())
+        {
+            options.ConfigureWarnings(warnings =>
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
     }
     else if (builder.Environment.IsProduction())
     {
@@ -253,6 +260,9 @@ var app = builder.Build();
 
 // Middleware
 app.UseCors();
+
+// Enable WebSockets for SignalR
+app.UseWebSockets();
 
 // Enable authentication and authorization
 if (!string.IsNullOrEmpty(jwtSecret))

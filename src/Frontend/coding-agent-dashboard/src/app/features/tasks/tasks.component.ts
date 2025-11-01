@@ -1,15 +1,26 @@
 import { Component, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { EnrichedTask } from '../../core/models/dashboard.models';
 import { NotificationService } from '../../core/services/notifications/notification.service';
+import { AgenticAiService } from '../../core/services/agentic-ai.service';
+import { TaskCreateDialogComponent } from './components/task-create-dialog.component';
 import { formatDuration as formatDurationUtil } from '../../shared/utils/time.utils';
+import { StatusChipComponent } from '../../shared/components/status-chip.component';
+import { AgenticBadgeComponent } from '../../shared/components/agentic-badge.component';
+import { LoadingStateComponent } from '../../shared/components/loading-state.component';
+import { EmptyStateComponent } from '../../shared/components/empty-state.component';
+import { ErrorStateComponent } from '../../shared/components/error-state.component';
 
 @Component({
   selector: 'app-tasks',
@@ -37,12 +48,22 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
         <mat-card-header>
           <mat-icon class="header-icon">assignment</mat-icon>
           <mat-card-title>Tasks</mat-card-title>
+          <div class="header-actions">
+            <button 
+              mat-raised-button 
+              color="primary" 
+              (click)="openCreateTaskDialog()"
+              [attr.data-testid]="'create-task-button'">
+              <mat-icon>add</mat-icon>
+              Create Task
+            </button>
+          </div>
         </mat-card-header>
         <mat-card-content>
           <app-loading-state 
             *ngIf="loading()" 
             mode="spinner" 
-            size="50"
+            [size]="50"
             message="Loading tasks...">
           </app-loading-state>
 
@@ -185,8 +206,13 @@ import { formatDuration as formatDurationUtil } from '../../shared/utils/time.ut
     mat-card-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
       margin-bottom: 24px;
+    }
+
+    .header-actions {
+      margin-left: auto;
     }
 
     .header-icon {
@@ -327,6 +353,7 @@ export class TasksComponent {
   private dashboardService = inject(DashboardService);
   private notificationService = inject(NotificationService);
   private agenticAiService = inject(AgenticAiService);
+  private dialog = inject(MatDialog);
 
   tasks = signal<EnrichedTask[]>([]);
   loading = signal<boolean>(true);
@@ -342,7 +369,7 @@ export class TasksComponent {
     this.loadTasks();
   }
 
-  private loadTasks() {
+  loadTasks() {
     this.loading.set(true);
     this.error.set(null);
 
@@ -408,5 +435,20 @@ export class TasksComponent {
       return 'AI Active';
     }
     return undefined;
+  }
+
+  openCreateTaskDialog(): void {
+    const dialogRef = this.dialog.open(TaskCreateDialogComponent, {
+      width: '600px',
+      maxWidth: '90vw',
+      disableClose: false
+    });
+
+    dialogRef.afterClosed().subscribe((createdTask) => {
+      if (createdTask) {
+        // Reload tasks to show the new one
+        this.loadTasks();
+      }
+    });
   }
 }

@@ -57,12 +57,13 @@ public class ConversationRepository : IConversationRepository
             .ToListAsync(ct);
     }
 
-    public async Task<PagedResult<Conversation>> GetPagedAsync(PaginationParameters pagination, CancellationToken ct = default)
+    public async Task<PagedResult<Conversation>> GetPagedAsync(Guid userId, PaginationParameters pagination, CancellationToken ct = default)
     {
-        _logger.LogDebug("Fetching conversations page {PageNumber} with size {PageSize}", 
-            pagination.PageNumber, pagination.PageSize);
+        _logger.LogDebug("Fetching conversations for user {UserId} page {PageNumber} with size {PageSize}", 
+            userId, pagination.PageNumber, pagination.PageSize);
 
         var query = _context.Conversations
+            .Where(c => c.UserId == userId) // Filter by userId to ensure user isolation
             .OrderByDescending(c => c.UpdatedAt);
 
         var totalCount = await query.CountAsync(ct);
@@ -85,10 +86,10 @@ public class ConversationRepository : IConversationRepository
             .ToListAsync(ct);
     }
 
-    public async Task<PagedResult<Conversation>> SearchPagedAsync(string query, PaginationParameters pagination, CancellationToken ct = default)
+    public async Task<PagedResult<Conversation>> SearchPagedAsync(Guid userId, string query, PaginationParameters pagination, CancellationToken ct = default)
     {
-        _logger.LogDebug("Searching conversations with query: {Query} (page: {PageNumber}, size: {PageSize})", 
-            query, pagination.PageNumber, pagination.PageSize);
+        _logger.LogDebug("Searching conversations for user {UserId} with query: {Query} (page: {PageNumber}, size: {PageSize})", 
+            userId, query, pagination.PageNumber, pagination.PageSize);
         
         // Check if we're using PostgreSQL or in-memory database
         var providerName = _context.Database.ProviderName;
@@ -131,10 +132,13 @@ public class ConversationRepository : IConversationRepository
             var baseQuery = _context.Conversations
                 .Include(c => c.Messages)
                 .Where(c => 
-                    // Search in conversation title
-                    EF.Functions.ToTsVector("english", c.Title).Matches(EF.Functions.ToTsQuery("english", searchQuery)) ||
-                    // Search in message content
-                    c.Messages.Any(m => EF.Functions.ToTsVector("english", m.Content).Matches(EF.Functions.ToTsQuery("english", searchQuery)))
+                    c.UserId == userId && // Filter by userId to ensure user isolation
+                    (
+                        // Search in conversation title
+                        EF.Functions.ToTsVector("english", c.Title).Matches(EF.Functions.ToTsQuery("english", searchQuery)) ||
+                        // Search in message content
+                        c.Messages.Any(m => EF.Functions.ToTsVector("english", m.Content).Matches(EF.Functions.ToTsQuery("english", searchQuery)))
+                    )
                 )
                 .Select(c => new 
                 {
@@ -161,16 +165,21 @@ public class ConversationRepository : IConversationRepository
             // Fallback for in-memory database: simple LIKE search with pagination
             var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             
-            // Search in conversation titles - materialize IDs first
+            // Search in conversation titles - materialize IDs first (filtered by userId)
             var conversationIdsByTitle = await _context.Conversations
-                .Where(c => searchTerms.Any(term => c.Title.ToLower().Contains(term)))
+                .Where(c => c.UserId == userId && searchTerms.Any(term => c.Title.ToLower().Contains(term)))
                 .Select(c => c.Id)
                 .ToListAsync(ct);
             
-            // Search in message content - materialize IDs first
+            // Search in message content - materialize IDs first (filtered by userId via conversation)
+            // Join Messages with Conversations to filter by userId
             var conversationIdsByMessage = await _context.Messages
-                .Where(m => searchTerms.Any(term => m.Content.ToLower().Contains(term)))
-                .Select(m => m.ConversationId)
+                .Join(_context.Conversations,
+                    message => message.ConversationId,
+                    conversation => conversation.Id,
+                    (message, conversation) => new { Message = message, Conversation = conversation })
+                .Where(x => x.Conversation.UserId == userId && searchTerms.Any(term => x.Message.Content.ToLower().Contains(term)))
+                .Select(x => x.Message.ConversationId)
                 .Distinct()
                 .ToListAsync(ct);
             
@@ -181,7 +190,7 @@ public class ConversationRepository : IConversationRepository
             
             var baseQuery = _context.Conversations
                 .Include(c => c.Messages)
-                .Where(c => allConversationIds.Contains(c.Id))
+                .Where(c => c.UserId == userId && allConversationIds.Contains(c.Id)) // Filter by userId to ensure user isolation
                 .OrderByDescending(c => c.UpdatedAt);
             
             var totalCount = await baseQuery.CountAsync(ct);
@@ -195,9 +204,9 @@ public class ConversationRepository : IConversationRepository
         }
     }
 
-    public async Task<IEnumerable<Conversation>> SearchAsync(string query, CancellationToken ct = default)
+    public async Task<IEnumerable<Conversation>> SearchAsync(Guid userId, string query, CancellationToken ct = default)
     {
-        _logger.LogDebug("Searching conversations with query: {Query}", query);
+        _logger.LogDebug("Searching conversations for user {UserId} with query: {Query}", userId, query);
         
         // Check if we're using PostgreSQL or in-memory database
         var providerName = _context.Database.ProviderName;
@@ -240,10 +249,13 @@ public class ConversationRepository : IConversationRepository
             var conversations = await _context.Conversations
                 .Include(c => c.Messages)
                 .Where(c => 
-                    // Search in conversation title
-                    EF.Functions.ToTsVector("english", c.Title).Matches(EF.Functions.ToTsQuery("english", searchQuery)) ||
-                    // Search in message content
-                    c.Messages.Any(m => EF.Functions.ToTsVector("english", m.Content).Matches(EF.Functions.ToTsQuery("english", searchQuery)))
+                    c.UserId == userId && // Filter by userId to ensure user isolation
+                    (
+                        // Search in conversation title
+                        EF.Functions.ToTsVector("english", c.Title).Matches(EF.Functions.ToTsQuery("english", searchQuery)) ||
+                        // Search in message content
+                        c.Messages.Any(m => EF.Functions.ToTsVector("english", m.Content).Matches(EF.Functions.ToTsQuery("english", searchQuery)))
+                    )
                 )
                 .Select(c => new 
                 {
@@ -265,16 +277,21 @@ public class ConversationRepository : IConversationRepository
             // Fallback for in-memory database: simple LIKE search
             var searchTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             
-            // Search in conversation titles - materialize IDs first
+            // Search in conversation titles - materialize IDs first (filtered by userId)
             var conversationIdsByTitle = await _context.Conversations
-                .Where(c => searchTerms.Any(term => c.Title.ToLower().Contains(term)))
+                .Where(c => c.UserId == userId && searchTerms.Any(term => c.Title.ToLower().Contains(term)))
                 .Select(c => c.Id)
                 .ToListAsync(ct);
             
-            // Search in message content - materialize IDs first
+            // Search in message content - materialize IDs first (filtered by userId via conversation)
+            // Join Messages with Conversations to filter by userId
             var conversationIdsByMessage = await _context.Messages
-                .Where(m => searchTerms.Any(term => m.Content.ToLower().Contains(term)))
-                .Select(m => m.ConversationId)
+                .Join(_context.Conversations,
+                    message => message.ConversationId,
+                    conversation => conversation.Id,
+                    (message, conversation) => new { Message = message, Conversation = conversation })
+                .Where(x => x.Conversation.UserId == userId && searchTerms.Any(term => x.Message.Content.ToLower().Contains(term)))
+                .Select(x => x.Message.ConversationId)
                 .Distinct()
                 .ToListAsync(ct);
             
@@ -283,10 +300,10 @@ public class ConversationRepository : IConversationRepository
                 .Union(conversationIdsByMessage)
                 .ToHashSet();
             
-            // Fetch conversations by IDs
+            // Fetch conversations by IDs (also filter by userId to ensure user isolation)
             var conversations = await _context.Conversations
                 .Include(c => c.Messages)
-                .Where(c => allConversationIds.Contains(c.Id))
+                .Where(c => c.UserId == userId && allConversationIds.Contains(c.Id))
                 .OrderByDescending(c => c.UpdatedAt)
                 .Take(100)
                 .ToListAsync(ct);

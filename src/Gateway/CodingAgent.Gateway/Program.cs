@@ -53,6 +53,31 @@ builder.Services
             ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
         };
+        
+        // Configure JWT Bearer to work with SignalR WebSocket connections
+        // SignalR passes the token as a query parameter for WebSocket connections
+        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                // For SignalR WebSocket connections, the token is passed as a query parameter
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    context.Token = accessToken;
+                }
+                // Also check Authorization header for regular HTTP requests
+                else if (context.Request.Headers.ContainsKey("Authorization"))
+                {
+                    var authHeader = context.Request.Headers["Authorization"].ToString();
+                    if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Token = authHeader.Substring("Bearer ".Length).Trim();
+                    }
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -207,8 +232,10 @@ app.Use(async (context, next) =>
     }
 });
 
-// Add authentication and authorization middleware
+// Add authentication middleware - must be before MapReverseProxy to authenticate WebSocket connections
 app.UseAuthentication();
+
+// Authorization is handled per-route basis (see MapReverseProxy below)
 
 // Rate limiting middleware (per-IP and per-user via Redis counters)
 app.Use(async (context, next) =>
@@ -372,6 +399,16 @@ app.MapReverseProxy(proxyPipeline =>
             path.StartsWith("/api/auth/refresh", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/api/auth/health", StringComparison.OrdinalIgnoreCase))
         {
+            await next();
+            return;
+        }
+        
+        // Allow SignalR hub endpoints to pass through (authentication handled by JWT Bearer middleware)
+        // JWT Bearer middleware extracts token from query string for WebSocket connections
+        if (path.StartsWith("/hubs/chat", StringComparison.OrdinalIgnoreCase))
+        {
+            // For SignalR hub connections, authentication is handled by JWT Bearer middleware
+            // which extracts the token from the query string. If authentication fails, it will return 401.
             await next();
             return;
         }

@@ -1,4 +1,4 @@
-import { Component, WritableSignal, signal } from '@angular/core';
+import { Component, WritableSignal, signal, OnInit, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,8 +8,11 @@ import { ChatThreadComponent } from './components/chat-thread.component';
 import { MessageInputComponent } from './components/message-input.component';
 import { SignalRService } from '../../core/services/signalr.service';
 import { ChatService } from '../../core/services/chat.service';
+import { NotificationService } from '../../core/services/notifications/notification.service';
 import { ConversationDto, MessageDto } from '../../core/models/chat.models';
+import { firstValueFrom } from 'rxjs';
 import * as signalR from '@microsoft/signalr';
+import { HubConnectionState } from '@microsoft/signalr';
 
 @Component({
   selector: 'app-chat',
@@ -60,7 +63,9 @@ import * as signalR from '@microsoft/signalr';
             <app-message-input 
               [attr.data-testid]="'message-input'"
               (message)="send($event)" 
-              (fileSelected)="upload($event)">
+              (fileSelected)="upload($event)"
+              [disabled]="!isConnected()"
+              [sending]="sending()">
             </app-message-input>
           </mat-card-actions>
           <div class="upload" *ngIf="uploading()" [attr.data-testid]="'upload-progress'">
@@ -176,36 +181,83 @@ import * as signalR from '@microsoft/signalr';
     }
   `]
 })
-export class ChatComponent {
-  constructor(private chatService: ChatService, private signalR: SignalRService) {
-    // Initialize signals that depend on injected services in the constructor to avoid TS2729
-    this.isConnected = this.signalR.isConnected;
-  }
-
+export class ChatComponent implements OnInit {
   selectedConversation = signal<ConversationDto | null>(null);
   messages = signal<MessageDto[]>([]);
   agentTyping = signal<boolean>(false);
   isConnected!: WritableSignal<boolean>;
   uploading = signal<boolean>(false);
   uploadProgress = signal<number>(0);
-  nextDelay = () => this.signalR.nextRetryDelayMs();
-  connState = () => {
-    const s = this.signalR.connectionState();
-    switch (s) {
-      case signalR.HubConnectionState.Disconnected: return 'Disconnected';
-      case signalR.HubConnectionState.Connecting: return 'Connecting';
-      case signalR.HubConnectionState.Connected: return 'Connected';
-      case signalR.HubConnectionState.Disconnecting: return 'Disconnecting';
-      case signalR.HubConnectionState.Reconnecting: return 'Reconnecting';
-      default: return '';
-    }
-  };
+  nextDelay = signal<number | null>(null);
+  connState = signal<string>('Disconnected');
+  sending = signal<boolean>(false);
+
+  constructor(
+    private chatService: ChatService,
+    private signalR: SignalRService,
+    private notification: NotificationService
+  ) {
+    // Initialize signals that depend on injected services in the constructor to avoid TS2729
+    this.isConnected = this.signalR.isConnected;
+    
+    // Use effect to react to SignalR state changes - must be in constructor for injection context
+    effect(() => {
+      const delay = this.signalR.nextRetryDelayMs();
+      this.nextDelay.set(delay);
+    });
+    
+    effect(() => {
+      const state = this.signalR.connectionState();
+      switch (state) {
+        case HubConnectionState.Disconnected:
+          this.connState.set('Disconnected');
+          break;
+        case HubConnectionState.Connecting:
+          this.connState.set('Connecting');
+          break;
+        case HubConnectionState.Connected:
+          this.connState.set('Connected');
+          break;
+        case HubConnectionState.Disconnecting:
+          this.connState.set('Disconnecting');
+          break;
+        case HubConnectionState.Reconnecting:
+          this.connState.set('Reconnecting');
+          break;
+        default:
+          this.connState.set('');
+      }
+    });
+  }
 
   async ngOnInit() {
-    await this.signalR.connect();
+    // Wait a bit to ensure auth is initialized
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      console.log('ChatComponent: Attempting SignalR connection...');
+      await this.signalR.connect();
+      console.log('ChatComponent: SignalR connection successful');
+    } catch (error: any) {
+      console.error('ChatComponent: Failed to connect to SignalR:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        status: error?.status,
+        statusText: error?.statusText
+      });
+      // Don't throw - let the UI show the offline state
+    }
     
     this.signalR.on<MessageDto>('ReceiveMessage', (msg) => {
-      this.messages.update(curr => [...curr, msg]);
+      console.log('ChatComponent: Received message via SignalR:', msg);
+      // Check if message already exists (avoid duplicates)
+      const existing = this.messages().find(m => m.id === msg.id);
+      if (!existing) {
+        this.messages.update(curr => [...curr, msg]);
+        console.log('ChatComponent: Added message to thread. Total messages:', this.messages().length);
+      } else {
+        console.log('ChatComponent: Message already exists, skipping:', msg.id);
+      }
     });
     
     // Listen for agent typing indicator
@@ -218,15 +270,81 @@ export class ChatComponent {
     this.selectedConversation.set(c);
     await this.signalR.joinConversation(c.id);
     // Load last messages (optional, if API supports it)
-    this.chatService.listMessages(c.id).subscribe(res => this.messages.set(res.items || []));
+    this.chatService.listMessages(c.id).subscribe({
+      next: (res) => this.messages.set(res.items || []),
+      error: (err) => {
+        console.error('Failed to load messages:', err);
+        this.messages.set([]);
+      }
+    });
   }
 
   async send(content: string) {
-    const c = this.selectedConversation();
-    if (!c) return;
+    // Check if SignalR is connected
+    if (!this.isConnected()) {
+      this.notification.error('Cannot send message: Not connected to chat service');
+      console.error('Cannot send message: SignalR not connected');
+      return;
+    }
+
+    // Ensure we have a conversation selected
+    let c = this.selectedConversation();
+    if (!c) {
+      // Auto-create a new conversation if none is selected
+      try {
+        this.sending.set(true);
+        const newConv = await firstValueFrom(this.chatService.createConversation(
+          content.substring(0, 50) || 'New Conversation'
+        ));
+        
+        if (newConv) {
+          this.selectedConversation.set(newConv);
+          // Load messages first (will be empty for new conversation)
+          // Then join conversation group for SignalR BEFORE sending message
+          try {
+            const messagesResponse = await firstValueFrom(this.chatService.listMessages(newConv.id));
+            const existingMessages = messagesResponse.items || [];
+            console.log('ChatComponent: Loaded messages for new conversation:', existingMessages.length);
+            this.messages.set(existingMessages);
+          } catch (err) {
+            console.error('Failed to load messages for new conversation:', err);
+            this.messages.set([]);
+          }
+          
+          // Join conversation group after messages are loaded
+          // This ensures we receive SignalR messages for this conversation
+          // IMPORTANT: Join BEFORE sending message to ensure we're in the group when backend echoes
+          await this.signalR.joinConversation(newConv.id);
+          console.log('ChatComponent: Joined conversation group:', newConv.id);
+          
+          // Small delay to ensure group join is registered on server
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          c = newConv;
+        } else {
+          this.notification.error('Failed to create conversation');
+          this.sending.set(false);
+          return;
+        }
+      } catch (error: any) {
+        console.error('Failed to create conversation:', error);
+        this.notification.error('Failed to create conversation: ' + (error?.message || 'Unknown error'));
+        this.sending.set(false);
+        return;
+      }
+    }
     
     // Send message to AI agent for processing
-    await this.signalR.sendMessage(c.id, content);
+    try {
+      this.sending.set(true);
+      await this.signalR.sendMessage(c.id, content);
+      console.log('Message sent successfully:', content);
+    } catch (error: any) {
+      console.error('Failed to send message:', error);
+      this.notification.error('Failed to send message: ' + (error?.message || 'Unknown error'));
+    } finally {
+      this.sending.set(false);
+    }
   }
 
   upload(file: File) {

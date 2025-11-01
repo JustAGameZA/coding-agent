@@ -55,7 +55,15 @@
       </a>
       <a mat-list-item routerLink="/admin/infrastructure" routerLinkActive="active" *ngIf="isAdmin()">
         <mat-icon matListItemIcon>admin_panel_settings</mat-icon>
-        <span matListItemTitle>Admin</span>
+        <span matListItemTitle>Infrastructure</span>
+      </a>
+      <a mat-list-item routerLink="/admin/users" routerLinkActive="active" *ngIf="isAdmin()">
+        <mat-icon matListItemIcon>people</mat-icon>
+        <span matListItemTitle>User Management</span>
+      </a>
+      <a mat-list-item routerLink="/admin/config" routerLinkActive="active" *ngIf="isAdmin()">
+        <mat-icon matListItemIcon>settings</mat-icon>
+        <span matListItemTitle>Configuration</span>
       </a>
     </mat-nav-list>
   </mat-sidenav>

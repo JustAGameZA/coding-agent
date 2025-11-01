@@ -1,5 +1,6 @@
 using CodingAgent.Services.Chat.Domain.Entities;
 using CodingAgent.Services.Chat.Domain.Repositories;
+using CodingAgent.Services.Chat.Infrastructure.Persistence;
 using CodingAgent.SharedKernel.Results;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -55,6 +56,14 @@ public static class ConversationEndpoints
             .WithSummary("Delete conversation")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("{id:guid}/messages", GetMessages)
+            .WithName("GetMessages")
+            .WithDescription("Retrieve messages for a conversation with cursor-based pagination")
+            .WithSummary("Get messages by conversation ID")
+            .Produces<PagedMessagesResponse>()
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status403Forbidden);
     }
 
     private static async Task<IResult> GetConversations(
@@ -66,20 +75,37 @@ public static class ConversationEndpoints
         int pageSize = 50,
         CancellationToken ct = default)
     {
-        logger.LogInformation("Getting conversations (page: {Page}, pageSize: {PageSize}, query: {Query})", page, pageSize, q);
+        // Extract userId from JWT claims - try multiple claim names
+        var userIdClaim = httpContext.User.FindFirst("sub") 
+                         ?? httpContext.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+
+        if (userIdClaim == null)
+        {
+            logger.LogWarning("GetConversations: missing user id claim");
+            return Results.Forbid();
+        }
+
+        if (!Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            logger.LogWarning("GetConversations: invalid user id claim value {UserId}", userIdClaim.Value);
+            return Results.Forbid();
+        }
+
+        logger.LogInformation("Getting conversations for user {UserId} (page: {Page}, pageSize: {PageSize}, query: {Query})", userId, page, pageSize, q);
         
         var pagination = new PaginationParameters(page, pageSize);
         PagedResult<Conversation> pagedResult;
         
         if (!string.IsNullOrWhiteSpace(q))
         {
-            // Search with pagination
-            pagedResult = await repository.SearchPagedAsync(q, pagination, ct);
+            // Search with pagination - filtered by userId
+            pagedResult = await repository.SearchPagedAsync(userId, q, pagination, ct);
         }
         else
         {
-            // Get all with pagination
-            pagedResult = await repository.GetPagedAsync(pagination, ct);
+            // Get all conversations for this user with pagination
+            pagedResult = await repository.GetPagedAsync(userId, pagination, ct);
         }
         
         var items = pagedResult.Items.Select(c => new ConversationDto
@@ -330,6 +356,104 @@ public static class ConversationEndpoints
         await repository.DeleteAsync(id, ct);
         return Results.NoContent();
     }
+
+    private static async Task<IResult> GetMessages(
+        Guid id,
+        IConversationRepository repository,
+        ChatDbContext dbContext,
+        ILogger<Program> logger,
+        HttpContext httpContext,
+        string? cursor = null,
+        int limit = 100,
+        CancellationToken ct = default)
+    {
+        logger.LogInformation("Getting messages for conversation {ConversationId}", id);
+
+        // First verify conversation exists and user has access
+        var conversation = await repository.GetByIdAsync(id, ct);
+        if (conversation is null)
+        {
+            return Results.NotFound();
+        }
+
+        // Extract userId from JWT claims - try multiple claim names
+        var userIdClaim = httpContext.User.FindFirst("sub") 
+                         ?? httpContext.User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")
+                         ?? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+
+        if (userIdClaim == null)
+        {
+            logger.LogWarning("GetMessages: missing user id claim");
+            return Results.Forbid();
+        }
+
+        if (!Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            logger.LogWarning("GetMessages: invalid user id claim value {UserId}", userIdClaim.Value);
+            return Results.Forbid();
+        }
+
+        // Enforce ownership
+        if (conversation.UserId != userId)
+        {
+            logger.LogWarning("User {UserId} attempted to access messages for conversation {ConversationId} they do not own", userId, id);
+            return Results.Forbid();
+        }
+
+        // Query messages from database
+        IQueryable<Message> messagesQuery = dbContext.Messages
+            .Where(m => m.ConversationId == id);
+
+        // Apply cursor-based pagination if cursor is provided
+        if (!string.IsNullOrEmpty(cursor) && Guid.TryParse(cursor, out var cursorGuid))
+        {
+            // Get the message at the cursor position
+            var cursorMessage = await dbContext.Messages
+                .FirstOrDefaultAsync(m => m.Id == cursorGuid && m.ConversationId == id, ct);
+            
+            if (cursorMessage != null)
+            {
+                // Continue from after the cursor message
+                messagesQuery = messagesQuery.Where(m => m.SentAt > cursorMessage.SentAt);
+            }
+        }
+
+        // Order by sent time ascending (oldest first) - apply order after filtering
+        messagesQuery = messagesQuery.OrderBy(m => m.SentAt);
+
+        // Apply limit (max 100)
+        var maxLimit = Math.Min(limit, 100);
+        var messages = await messagesQuery
+            .Take(maxLimit)
+            .ToListAsync(ct);
+
+        // Convert to DTOs
+        var messageDtos = messages.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            ConversationId = m.ConversationId,
+            Role = m.Role.ToString(),
+            Content = m.Content,
+            SentAt = m.SentAt,
+            Attachments = new List<AttachmentDto>() // TODO: Load attachments if needed
+        }).ToList();
+
+        // Determine next cursor (ID of the last message if there might be more)
+        string? nextCursor = null;
+        if (messages.Count == maxLimit)
+        {
+            var lastMessage = messages.Last();
+            nextCursor = lastMessage.Id.ToString();
+        }
+
+        var response = new PagedMessagesResponse
+        {
+            Items = messageDtos,
+            NextCursor = nextCursor
+        };
+
+        return Results.Ok(response);
+    }
 }
 
 // DTOs
@@ -377,5 +501,14 @@ public record MessageDto
     public string Content { get; init; } = string.Empty;
     public DateTime SentAt { get; init; }
     public List<AttachmentDto> Attachments { get; init; } = new();
+}
+
+/// <summary>
+/// Paginated response for messages with cursor-based pagination
+/// </summary>
+public record PagedMessagesResponse
+{
+    public List<MessageDto> Items { get; init; } = new();
+    public string? NextCursor { get; init; }
 }
 

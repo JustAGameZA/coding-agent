@@ -92,6 +92,31 @@ public class AgentResponseEventConsumer : IConsumer<AgentResponseEvent>
                 evt.ConversationId);
             
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            
+            // Send error message to client via SignalR before retrying
+            try
+            {
+                await _hubContext.Clients.Group(evt.ConversationId.ToString())
+                    .SendAsync("ReceiveMessage", new
+                    {
+                        Id = Guid.NewGuid(),
+                        ConversationId = evt.ConversationId,
+                        UserId = (Guid?)null,
+                        Content = $"❌ Error processing response: {ex.Message}",
+                        Role = "Assistant",
+                        SentAt = DateTime.UtcNow,
+                        IsError = true
+                    });
+
+                // Hide typing indicator
+                await _hubContext.Clients.Group(evt.ConversationId.ToString())
+                    .SendAsync("AgentTyping", false);
+            }
+            catch (Exception signalREx)
+            {
+                _logger.LogError(signalREx, "Failed to send error message to client for conversation {ConversationId}", evt.ConversationId);
+            }
+            
             throw; // MassTransit will retry
         }
     }

@@ -157,7 +157,7 @@ import { LoadingStateComponent } from '../../shared/components/loading-state.com
       </div>
     </div>
 
-    <app-loading-state *ngIf="loading()" mode="spinner" size="50"></app-loading-state>
+    <app-loading-state *ngIf="loading()" mode="spinner" [size]="50"></app-loading-state>
   `,
   styles: [`
     .agentic-dashboard {

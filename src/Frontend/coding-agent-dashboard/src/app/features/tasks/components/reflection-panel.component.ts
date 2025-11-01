@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { AgenticAiService, ReflectionResult } from '../../../../core/services/agentic-ai.service';
+import { AgenticAiService, ReflectionResult } from '../../../core/services/agentic-ai.service';
 
 @Component({
   selector: 'app-reflection-panel',
@@ -248,11 +248,11 @@ export class ReflectionPanelComponent {
   private loadReflection() {
     this.loading.set(true);
     this.agenticAiService.getReflection(this.executionId).subscribe({
-      next: (result) => {
+      next: (result: ReflectionResult) => {
         this.reflection.set(result);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to load reflection:', err);
         this.loading.set(false);
       }

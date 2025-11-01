@@ -42,6 +42,16 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'profile/password',
+    loadComponent: () => import('./features/auth/components/password-change.component').then(m => m.PasswordChangeComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'github/repositories',
+    loadComponent: () => import('./features/github/repository-connection.component').then(m => m.RepositoryConnectionComponent),
+    canActivate: [authGuard]
+  },
+  {
     path: 'admin',
     loadChildren: () => import('./features/admin/admin.routes').then(m => m.adminRoutes),
     canActivate: [authGuard]

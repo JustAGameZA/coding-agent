@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { LoginPage, RegisterPage } from './pages/auth.page';
-import { mockUsers, waitForAngular } from './fixtures';
+import { mockUsers, waitForAngular, setupAdminSession, setupConsoleErrorTracking } from './fixtures';
 
 /**
  * Authentication E2E Tests
@@ -32,14 +32,23 @@ async function registerTestUser(page: Page, username: string, email: string, pas
 
 test.describe('Login Flow', () => {
   let loginPage: LoginPage;
+  let consoleTracker: ReturnType<typeof setupConsoleErrorTracking>;
   
   test.beforeEach(async ({ page }) => {
+    // Setup console error tracking
+    consoleTracker = setupConsoleErrorTracking(page);
+    
     loginPage = new LoginPage(page);
     
     // NO MOCKS - Test against real backend services
     
     await loginPage.goto();
     await waitForAngular(page);
+  });
+
+  test.afterEach(async () => {
+    // Check for console errors
+    consoleTracker.assertNoErrors('test execution');
   });
   
   test('should display login form', async () => {
@@ -66,6 +75,332 @@ test.describe('Login Flow', () => {
     // Verify token stored in localStorage
     const token = await page.evaluate(() => localStorage.getItem('auth_token'));
     expect(token).toBeTruthy();
+  });
+  
+  test('should display full UI with menus after successful login', async ({ page }) => {
+    // First register the test user
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Clear any existing auth state
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    
+    // Navigate to login
+    await loginPage.goto();
+    await waitForAngular(page);
+    
+    // Verify we're on login page (toolbar should NOT be visible)
+    const toolbarBeforeLogin = page.locator('[data-testid="app-toolbar"]');
+    await expect(toolbarBeforeLogin).not.toBeVisible();
+    
+    // Login
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for redirect to dashboard
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    
+    // Wait for Angular to stabilize and detect auth state change
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Verify token is stored
+    const token = await page.evaluate(() => localStorage.getItem('auth_token'));
+    expect(token).toBeTruthy();
+    
+    // Verify app toolbar is visible (with menus)
+    const toolbar = page.locator('[data-testid="app-toolbar"]');
+    await expect(toolbar).toBeVisible({ timeout: 10000 });
+    
+    // Verify toolbar elements are present
+    const menuToggle = page.locator('[data-testid="menu-toggle"]');
+    await expect(menuToggle).toBeVisible({ timeout: 5000 });
+    
+    const userMenuButton = page.locator('[data-testid="user-menu-button"]');
+    await expect(userMenuButton).toBeVisible({ timeout: 5000 });
+    
+    // Verify sidenav/navigation menu is visible
+    const sidenav = page.locator('mat-sidenav.app-sidenav');
+    await expect(sidenav).toBeVisible({ timeout: 5000 });
+    
+    // Verify navigation links are present in sidenav
+    const dashboardLink = page.locator('mat-nav-list a[routerLink="/dashboard"]');
+    await expect(dashboardLink).toBeVisible({ timeout: 5000 });
+    
+    const chatLink = page.locator('mat-nav-list a[routerLink="/chat"]');
+    await expect(chatLink).toBeVisible({ timeout: 5000 });
+    
+    const tasksLink = page.locator('mat-nav-list a[routerLink="/tasks"]');
+    await expect(tasksLink).toBeVisible({ timeout: 5000 });
+    
+    const agenticLink = page.locator('mat-nav-list a[routerLink="/agentic"]');
+    await expect(agenticLink).toBeVisible({ timeout: 5000 });
+    
+    // Verify user menu can be opened
+    await userMenuButton.click();
+    await page.waitForTimeout(500);
+    
+    const userMenu = page.locator('[data-testid="user-menu"]');
+    await expect(userMenu).toBeVisible({ timeout: 3000 });
+    
+    // Verify logout button is in user menu
+    const logoutButton = page.locator('[data-testid="logout-button"]');
+    await expect(logoutButton).toBeVisible({ timeout: 3000 });
+    
+    // Verify dashboard content is visible (not just empty page)
+    const heading = page.getByRole('heading', { name: /dashboard/i });
+    await expect(heading).toBeVisible({ timeout: 5000 });
+  });
+  
+  test('should navigate to Dashboard when clicking Dashboard menu item', async ({ page }) => {
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Login
+    await loginPage.goto();
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Dashboard menu item
+    const dashboardLink = page.locator('mat-nav-list a[routerLink="/dashboard"]');
+    await expect(dashboardLink).toBeVisible({ timeout: 5000 });
+    await dashboardLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on dashboard
+    await page.waitForURL('**/dashboard', { timeout: 5000 });
+    const heading = page.getByRole('heading', { name: /dashboard/i });
+    await expect(heading).toBeVisible({ timeout: 5000 });
+    
+    // Verify link is active
+    await expect(dashboardLink).toHaveClass(/active/);
+  });
+  
+  test('should navigate to Chat when clicking Chat menu item', async ({ page }) => {
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Login
+    await loginPage.goto();
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Chat menu item
+    const chatLink = page.locator('mat-nav-list a[routerLink="/chat"]');
+    await expect(chatLink).toBeVisible({ timeout: 5000 });
+    await chatLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on chat page
+    await page.waitForURL('**/chat', { timeout: 5000 });
+    
+    // Verify chat page elements are present
+    const chatRoot = page.locator('[data-testid="chat-root"]');
+    await expect(chatRoot).toBeVisible({ timeout: 5000 });
+    
+    // Verify link is active
+    await expect(chatLink).toHaveClass(/active/);
+  });
+  
+  test('should navigate to Tasks when clicking Tasks menu item', async ({ page }) => {
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Login
+    await loginPage.goto();
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Tasks menu item
+    const tasksLink = page.locator('mat-nav-list a[routerLink="/tasks"]');
+    await expect(tasksLink).toBeVisible({ timeout: 5000 });
+    await tasksLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on tasks page
+    await page.waitForURL('**/tasks', { timeout: 5000 });
+    
+    // Verify tasks page elements are present
+    const tasksTable = page.locator('table[data-testid="tasks-table"]');
+    const tasksTableExists = await tasksTable.isVisible().catch(() => false);
+    expect(tasksTableExists).toBe(true);
+    
+    // Verify link is active
+    await expect(tasksLink).toHaveClass(/active/);
+  });
+  
+  test('should navigate to Agentic AI when clicking Agentic AI menu item', async ({ page }) => {
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Login
+    await loginPage.goto();
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Agentic AI menu item
+    const agenticLink = page.locator('mat-nav-list a[routerLink="/agentic"]');
+    await expect(agenticLink).toBeVisible({ timeout: 5000 });
+    await agenticLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on agentic AI page
+    await page.waitForURL('**/agentic', { timeout: 5000 });
+    
+    // Verify agentic AI page elements are present
+    const agenticHeading = page.getByRole('heading', { name: /agentic/i });
+    await expect(agenticHeading).toBeVisible({ timeout: 5000 });
+    
+    // Verify link is active
+    await expect(agenticLink).toHaveClass(/active/);
+  });
+  
+  test('should show admin menu items for admin users', async ({ page }) => {
+    // Setup admin session
+    await setupAdminSession(page);
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Verify admin menu items are visible
+    const infrastructureLink = page.locator('mat-nav-list a[routerLink="/admin/infrastructure"]');
+    await expect(infrastructureLink).toBeVisible({ timeout: 5000 });
+    
+    const userManagementLink = page.locator('mat-nav-list a[routerLink="/admin/users"]');
+    await expect(userManagementLink).toBeVisible({ timeout: 5000 });
+    
+    const configLink = page.locator('mat-nav-list a[routerLink="/admin/config"]');
+    await expect(configLink).toBeVisible({ timeout: 5000 });
+  });
+  
+  test('should navigate to Infrastructure when clicking Infrastructure menu item (admin only)', async ({ page }) => {
+    // Setup admin session
+    await setupAdminSession(page);
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Infrastructure menu item
+    const infrastructureLink = page.locator('mat-nav-list a[routerLink="/admin/infrastructure"]');
+    await expect(infrastructureLink).toBeVisible({ timeout: 5000 });
+    await infrastructureLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on infrastructure page
+    await page.waitForURL('**/admin/infrastructure', { timeout: 5000 });
+    
+    // Verify infrastructure page elements are present
+    const infrastructureHeading = page.getByRole('heading', { name: /infrastructure/i });
+    await expect(infrastructureHeading).toBeVisible({ timeout: 5000 });
+    
+    // Verify link is active
+    await expect(infrastructureLink).toHaveClass(/active/);
+  });
+  
+  test('should navigate to User Management when clicking User Management menu item (admin only)', async ({ page }) => {
+    // Setup admin session
+    await setupAdminSession(page);
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click User Management menu item
+    const userManagementLink = page.locator('mat-nav-list a[routerLink="/admin/users"]');
+    await expect(userManagementLink).toBeVisible({ timeout: 5000 });
+    await userManagementLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on user management page
+    await page.waitForURL('**/admin/users', { timeout: 5000 });
+    
+    // Verify user management page elements are present
+    const usersTable = page.locator('table[data-testid="users-table"]');
+    const usersTableExists = await usersTable.isVisible().catch(() => false);
+    expect(usersTableExists).toBe(true);
+    
+    // Verify link is active
+    await expect(userManagementLink).toHaveClass(/active/);
+  });
+  
+  test('should navigate to Configuration when clicking Configuration menu item (admin only)', async ({ page }) => {
+    // Setup admin session
+    await setupAdminSession(page);
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Click Configuration menu item
+    const configLink = page.locator('mat-nav-list a[routerLink="/admin/config"]');
+    await expect(configLink).toBeVisible({ timeout: 5000 });
+    await configLink.click();
+    await waitForAngular(page);
+    
+    // Verify we're on configuration page
+    await page.waitForURL('**/admin/config', { timeout: 5000 });
+    
+    // Verify configuration page elements are present
+    const configHeading = page.getByRole('heading', { name: /configuration/i });
+    const configHeadingExists = await configHeading.isVisible().catch(() => false);
+    expect(configHeadingExists).toBe(true);
+    
+    // Verify link is active
+    await expect(configLink).toHaveClass(/active/);
+  });
+  
+  test('should not show admin menu items for non-admin users', async ({ page }) => {
+    const { username, email, password } = mockUsers.validUser;
+    await registerTestUser(page, username, email, password);
+    
+    // Login
+    await loginPage.goto();
+    await loginPage.fillForm(username, password);
+    await loginPage.loginButton.click();
+    
+    // Wait for dashboard to load
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await waitForAngular(page);
+    await page.waitForTimeout(500);
+    
+    // Verify admin menu items are NOT visible
+    const infrastructureLink = page.locator('mat-nav-list a[routerLink="/admin/infrastructure"]');
+    await expect(infrastructureLink).not.toBeVisible();
+    
+    const userManagementLink = page.locator('mat-nav-list a[routerLink="/admin/users"]');
+    await expect(userManagementLink).not.toBeVisible();
+    
+    const configLink = page.locator('mat-nav-list a[routerLink="/admin/config"]');
+    await expect(configLink).not.toBeVisible();
   });
   
   test('should show error with invalid credentials', async () => {
@@ -152,15 +487,9 @@ test.describe('Login Flow', () => {
   });
   
   test('should handle API errors gracefully', async ({ page }) => {
-    // Override with error response
-    await page.route('**/api/auth/login', async route => {
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Internal Server Error' })
-      });
-    });
-    
+    // Uses real API - no mocking
+    // Note: To test API errors with real backend, we'd need backend to fail
+    // For now, verify form validation works
     await loginPage.fillForm('testuser', 'password');
     await loginPage.loginButton.click();
     

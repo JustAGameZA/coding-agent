@@ -309,6 +309,19 @@ using (var scope = app.Services.CreateScope())
         isProduction: app.Environment.IsProduction());
 }
 
+// Seed default admin user if it doesn't exist (only in non-production)
+if (!app.Environment.IsProduction())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        await CodingAgent.Services.Auth.Infrastructure.Data.DataSeeder.SeedAdminUserAsync(
+            app.Services,
+            username: "admin",
+            password: "Admin123!",
+            email: "admin@example.com");
+    }
+}
+
 await app.RunAsync();
 
 // Expose Program class for WebApplicationFactory in tests

@@ -6,7 +6,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatExpansionModule } from '@angular/material/expansion';
-import { AgenticAiService, Plan, PlanStep } from '../../../../core/services/agentic-ai.service';
+import { AgenticAiService, Plan, PlanStep } from '../../../core/services/agentic-ai.service';
 
 @Component({
   selector: 'app-planning-progress',
@@ -347,11 +347,11 @@ export class PlanningProgressComponent {
   private loadPlan() {
     this.loading.set(true);
     this.agenticAiService.getPlan(this.taskId).subscribe({
-      next: (result) => {
+      next: (result: Plan) => {
         this.plan.set(result);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to load plan:', err);
         this.loading.set(false);
       }
@@ -360,7 +360,7 @@ export class PlanningProgressComponent {
 
   getProgressPercent(): number {
     if (!this.plan()?.subTasks?.length) return 0;
-    const completed = this.plan()!.subTasks.filter(s => s.status === 'Completed').length;
+    const completed = this.plan()!.subTasks?.filter((s: PlanStep) => s.status === 'Completed').length || 0;
     return Math.round((completed / this.plan()!.subTasks.length) * 100);
   }
 

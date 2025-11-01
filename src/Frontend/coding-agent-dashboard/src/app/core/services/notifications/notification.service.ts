@@ -9,6 +9,10 @@ export class NotificationService {
     this.snack.open(message, 'OK', { duration });
   }
 
+  success(message: string, duration = 3000) {
+    this.snack.open(message, 'OK', { duration, panelClass: ['snack-success'] });
+  }
+
   error(message: string, duration = 4000) {
     this.snack.open(message, 'Dismiss', { duration, panelClass: ['snack-error'] });
   }

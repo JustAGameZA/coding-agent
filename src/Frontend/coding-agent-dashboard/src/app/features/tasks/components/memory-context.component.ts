@@ -6,7 +6,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { AgenticAiService, MemoryContext } from '../../../../core/services/agentic-ai.service';
+import { AgenticAiService, MemoryContext } from '../../../core/services/agentic-ai.service';
 
 @Component({
   selector: 'app-memory-context',
@@ -338,11 +338,11 @@ export class MemoryContextComponent {
   private loadContext() {
     this.loading.set(true);
     this.agenticAiService.getMemoryContext(this.query).subscribe({
-      next: (result) => {
+      next: (result: MemoryContext) => {
         this.context.set(result);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to load memory context:', err);
         this.loading.set(false);
       }
@@ -365,7 +365,8 @@ export class MemoryContextComponent {
     return 'low';
   }
 
-  formatDate(date: string): string {
+  formatDate(date: string | undefined): string {
+    if (!date) return 'N/A';
     return new Date(date).toLocaleString();
   }
 }
