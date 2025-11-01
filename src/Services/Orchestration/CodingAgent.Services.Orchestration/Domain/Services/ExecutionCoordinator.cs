@@ -5,6 +5,7 @@ using CodingAgent.Services.Orchestration.Domain.Repositories;
 using CodingAgent.Services.Orchestration.Domain.Strategies;
 using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using CodingAgent.Services.Orchestration.Infrastructure.Logging;
+using CodingAgent.Services.Orchestration.Infrastructure.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

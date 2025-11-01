@@ -1,5 +1,6 @@
 using CodingAgent.SharedKernel.Domain.Events;
 using CodingAgent.Services.Orchestration.Domain.Models;
+using CodingAgent.Services.Orchestration.Domain.Services;
 using CodingAgent.Services.Orchestration.Infrastructure.ExternalServices;
 using MassTransit;
 

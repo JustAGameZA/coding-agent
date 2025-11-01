@@ -2,19 +2,23 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using CodingAgent.Services.Orchestration.Domain.Models;
+using CodingAgent.Services.Orchestration.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace CodingAgent.Services.Orchestration.Domain.Services;
 
 /// <summary>
 /// Coder agent that implements code changes for subtasks.
-/// Uses GPT-4o for code generation.
+/// Classifies each subtask individually and selects appropriate model based on complexity.
 /// </summary>
 public class CoderAgent : ICoderAgent
 {
     private readonly ILlmClient _llmClient;
+    private readonly IMLClassifierClient _mlClassifierClient;
+    private readonly IMLModelSelector _modelSelector;
+    private readonly IModelPerformanceTracker _performanceTracker;
+    private readonly IABTestingEngine _abTesting;
     private readonly ILogger<CoderAgent> _logger;
-    private const string ModelName = "gpt-4o";
     private const double Temperature = 0.3;
     private const int MaxTokens = 4000;
 
@@ -29,9 +33,19 @@ public class CoderAgent : ICoderAgent
         RegexOptions.Singleline | RegexOptions.Compiled,
         TimeSpan.FromSeconds(2));
 
-    public CoderAgent(ILlmClient llmClient, ILogger<CoderAgent> logger)
+    public CoderAgent(
+        ILlmClient llmClient,
+        IMLClassifierClient mlClassifierClient,
+        IMLModelSelector modelSelector,
+        IModelPerformanceTracker performanceTracker,
+        IABTestingEngine abTesting,
+        ILogger<CoderAgent> logger)
     {
         _llmClient = llmClient ?? throw new ArgumentNullException(nameof(llmClient));
+        _mlClassifierClient = mlClassifierClient ?? throw new ArgumentNullException(nameof(mlClassifierClient));
+        _modelSelector = modelSelector ?? throw new ArgumentNullException(nameof(modelSelector));
+        _performanceTracker = performanceTracker ?? throw new ArgumentNullException(nameof(performanceTracker));
+        _abTesting = abTesting ?? throw new ArgumentNullException(nameof(abTesting));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -48,11 +62,65 @@ public class CoderAgent : ICoderAgent
                 "CoderAgent: Implementing subtask {SubTaskId} - {Title}",
                 subTask.Id, subTask.Title);
 
+            // Step 1: Classify the subtask individually to determine complexity
+            ClassificationResponse? classification = null;
+            TaskComplexity complexity = TaskComplexity.Medium;
+            string taskType = "Feature";
+
+            try
+            {
+                _logger.LogInformation(
+                    "CoderAgent: Classifying subtask {SubTaskId} to determine complexity",
+                    subTask.Id);
+
+                var classificationRequest = new ClassificationRequest
+                {
+                    TaskDescription = $"{subTask.Title}: {subTask.Description}"
+                };
+
+                classification = await _mlClassifierClient.ClassifyAsync(classificationRequest, cancellationToken);
+                complexity = classification.GetComplexity();
+                taskType = classification.TaskType ?? "Feature";
+
+                _logger.LogInformation(
+                    "CoderAgent: Subtask {SubTaskId} classified as {TaskType}/{Complexity}",
+                    subTask.Id, taskType, complexity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "CoderAgent: Failed to classify subtask {SubTaskId}, using defaults", subTask.Id);
+                // Continue with default values
+            }
+
+            // Step 2: Use ML Model Selector to choose best model (includes A/B testing and performance tracking)
+            string modelName = "gpt-4o"; // Default fallback
+            ModelSelectionResult? modelSelection = null;
+
+            try
+            {
+                modelSelection = await _modelSelector.SelectBestModelAsync(
+                    $"{subTask.Title}: {subTask.Description}",
+                    taskType,
+                    complexity,
+                    cancellationToken: cancellationToken);
+
+                modelName = modelSelection.SelectedModel;
+
+                _logger.LogInformation(
+                    "CoderAgent: Model selector selected {Model} for subtask {SubTaskId}. Reason: {Reason}, Confidence: {Confidence}",
+                    modelName, subTask.Id, modelSelection.Reason, modelSelection.Confidence);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "CoderAgent: Failed to select model for subtask {SubTaskId}, using default", subTask.Id);
+                // Continue with default model
+            }
+
             var prompt = BuildCodingPrompt(subTask, context);
 
             var llmRequest = new LlmRequest
             {
-                Model = ModelName,
+                Model = modelName, // Use model selected based on classification
                 Messages = new List<LlmMessage>
                 {
                     new() { Role = "system", Content = GetSystemPrompt() },
@@ -75,6 +143,51 @@ public class CoderAgent : ICoderAgent
             _logger.LogInformation(
                 "CoderAgent: Implemented subtask {SubTaskId} with {ChangeCount} changes in {Duration}ms",
                 subTask.Id, changes.Count, stopwatch.ElapsedMilliseconds);
+
+            // Track performance for model selection optimization
+            try
+            {
+                var executionResult = new ModelExecutionResult
+                {
+                    ModelName = modelName,
+                    TaskType = taskType,
+                    Complexity = complexity,
+                    Success = changes.Count > 0, // Consider successful if changes were generated
+                    TokensUsed = response.TokensUsed,
+                    Cost = response.Cost,
+                    Duration = stopwatch.Elapsed,
+                    QualityScore = changes.Count > 0 ? 7 : 3, // Simple quality heuristic
+                    ExecutedAt = DateTime.UtcNow
+                };
+
+                await _performanceTracker.RecordExecutionAsync(executionResult, cancellationToken);
+
+                // Record A/B test result if applicable
+                if (modelSelection?.IsABTest == true && modelSelection.ABTestId.HasValue)
+                {
+                    var abTestResult = new ABTestResult
+                    {
+                        RequestId = Guid.NewGuid(),
+                        Variant = modelName,
+                        Success = changes.Count > 0,
+                        Duration = stopwatch.Elapsed,
+                        TokensUsed = response.TokensUsed,
+                        Cost = response.Cost,
+                        QualityScore = changes.Count > 0 ? 7 : 3
+                    };
+
+                    await _abTesting.RecordResultAsync(
+                        modelSelection.ABTestId.Value,
+                        modelName,
+                        abTestResult,
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "CoderAgent: Failed to track performance for subtask {SubTaskId}", subTask.Id);
+                // Don't fail execution if tracking fails
+            }
 
             return new AgentResult
             {

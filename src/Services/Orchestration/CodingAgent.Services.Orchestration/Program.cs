@@ -185,6 +185,39 @@ builder.Services.AddHttpClient<IMLClassifierClient, MLClassifierClient>(client =
 .AddPolicyHandler(GetRetryPolicy())
 .AddPolicyHandler(GetCircuitBreakerPolicy());
 
+// Register ML Training HTTP client with retry policy
+builder.Services.AddHttpClient<IMLTrainingClient, MLTrainingClient>(client =>
+{
+    var mlClassifierBaseUrl = builder.Configuration["MLClassifier:BaseUrl"] ?? "http://localhost:8000";
+    client.BaseAddress = new Uri(mlClassifierBaseUrl);
+    var timeoutMs = builder.Configuration.GetValue<int?>("MLClassifier:TimeoutMs")
+        ?? (builder.Environment.IsProduction() ? 300 : 1000);
+    client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+// Register Ollama Service client for model discovery
+builder.Services.AddHttpClient<OllamaServiceClient>(client =>
+{
+    var ollamaServiceUrl = builder.Configuration["Ollama:ServiceUrl"] ?? "http://ollama-service:5003";
+    client.BaseAddress = new Uri(ollamaServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(10);
+})
+.AddPolicyHandler(GetRetryPolicy());
+
+// Register Model Registry (discovers available models)
+builder.Services.AddSingleton<IModelRegistry, ModelRegistry>();
+
+// Register Model Performance Tracker
+builder.Services.AddSingleton<IModelPerformanceTracker, ModelPerformanceTracker>();
+
+// Register A/B Testing Engine
+builder.Services.AddSingleton<IABTestingEngine, ABTestingEngine>();
+
+// Register ML Model Selector (uses ML to predict best model)
+builder.Services.AddScoped<IMLModelSelector, MLModelSelector>();
+
 // Register GitHub service HTTP client with retry policy
 builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
 {
@@ -345,6 +378,8 @@ app.MapPrometheusScrapingEndpoint("/metrics");
 app.MapTaskEndpoints();
 app.MapEventTestEndpoints();
 app.MapFeedbackEndpoints();
+app.MapModelEndpoints();
+app.MapABTestEndpoints();
 
 // Root endpoint
 app.MapGet("/", () => Results.Ok(new

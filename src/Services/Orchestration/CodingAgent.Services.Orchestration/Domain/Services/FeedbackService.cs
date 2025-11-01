@@ -8,15 +8,18 @@ namespace CodingAgent.Services.Orchestration.Domain.Services;
 public class FeedbackService : IFeedbackService
 {
     private readonly IMemoryService? _memoryService;
+    private readonly IMLTrainingClient? _mlTrainingClient;
     private readonly ILogger<FeedbackService> _logger;
     private readonly List<Feedback> _feedbacks = new(); // In-memory storage - replace with repository
 
     public FeedbackService(
         ILogger<FeedbackService> logger,
-        IMemoryService? memoryService = null)
+        IMemoryService? memoryService = null,
+        IMLTrainingClient? mlTrainingClient = null)
     {
         _logger = logger;
         _memoryService = memoryService;
+        _mlTrainingClient = mlTrainingClient;
     }
 
     public Task RecordFeedbackAsync(Feedback feedback, CancellationToken ct)
@@ -99,19 +102,55 @@ public class FeedbackService : IFeedbackService
         });
     }
 
-    public Task UpdateModelParametersAsync(FeedbackAnalysis analysis, CancellationToken ct)
+    public async Task UpdateModelParametersAsync(FeedbackAnalysis analysis, CancellationToken ct)
     {
         _logger.LogInformation("Updating model parameters based on feedback analysis for task {TaskId}", analysis.TaskId);
 
-        // In production, this would trigger ML model retraining
-        // For now, just log the analysis
         foreach (var pattern in analysis.Patterns)
         {
             _logger.LogInformation("Pattern identified: {Description}, new success rate: {SuccessRate}", 
                 pattern.PatternDescription, pattern.NewSuccessRate);
         }
 
-        return Task.CompletedTask;
+        // Trigger ML model retraining if significant changes detected
+        if (analysis.HasSignificantChanges && _mlTrainingClient != null)
+        {
+            try
+            {
+                _logger.LogInformation(
+                    "Significant feedback changes detected for task {TaskId}, triggering ML model retraining",
+                    analysis.TaskId);
+
+                var retrainRequest = new TrainingRetrainRequest
+                {
+                    MinSamples = 1000, // Default minimum samples
+                    ModelVersion = null // Let ML service generate version
+                };
+
+                var retrainResponse = await _mlTrainingClient.TriggerRetrainingAsync(retrainRequest, ct);
+
+                _logger.LogInformation(
+                    "ML model retraining triggered: Status={Status}, SamplesUsed={SamplesUsed}, " +
+                    "NewModelVersion={NewModelVersion}, Accuracy={Accuracy}",
+                    retrainResponse.Status,
+                    retrainResponse.SamplesUsed,
+                    retrainResponse.NewModelVersion,
+                    retrainResponse.Accuracy);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to trigger ML model retraining for task {TaskId}", analysis.TaskId);
+                // Don't throw - continue execution even if retraining fails
+            }
+        }
+        else if (!analysis.HasSignificantChanges)
+        {
+            _logger.LogDebug("No significant changes detected, skipping ML model retraining");
+        }
+        else if (_mlTrainingClient == null)
+        {
+            _logger.LogWarning("ML Training client not available, cannot trigger retraining");
+        }
     }
 
     private List<FeedbackPattern> AnalyzePatterns(List<Feedback> feedbacks)

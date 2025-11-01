@@ -139,9 +139,11 @@ public class OllamaLlmClient : ILlmClient
     /// <summary>
     /// Maps generic model names to Ollama-specific models.
     /// Uses available models from the Ollama backend.
+    /// Note: In production, this should query ModelRegistry for available models.
     /// </summary>
     private static string MapModelName(string requestedModel)
     {
+        // Basic mapping - ModelRegistry should be used for dynamic discovery
         return requestedModel.ToLowerInvariant() switch
         {
             "gpt-4o-mini" => "mistral:latest", // Fast chat model (use :latest tag)
