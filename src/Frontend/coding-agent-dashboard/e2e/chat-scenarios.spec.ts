@@ -225,14 +225,13 @@ test.describe('Chat Scenarios - Message Type Testing', () => {
     
     // Validate AI response contains expected answer (2)
     // Wait for AI to respond with the calculation result
+    // The response might be "The sum of 1 and 1 is 2" or "1+1 = 2" etc.
     try {
-      await waitForAndValidateResponse(chatPage, page, ['2', 'equals 2', '= 2', 'result is 2'], 30000);
+      await waitForAndValidateResponse(chatPage, page, ['2', 'is 2', 'equals 2', '= 2', 'result is 2', 'sum.*2'], 30000);
       console.log('✓ AI correctly responded with answer "2" for calculation 1+1');
     } catch (error) {
-      // If validation fails, log but don't fail the test (as long as message was sent)
-      console.warn('⚠ AI response validation failed (message was still sent successfully):', error);
-      // For now, we'll log this but not fail - the message sending part is more critical
-      // In the future, we can make this stricter if needed
+      // AI response validation is critical - fail the test if no response received
+      throw new Error(`AI did not respond with expected answer "2" for calculation 1+1. Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 
@@ -260,6 +259,14 @@ test.describe('Chat Scenarios - Message Type Testing', () => {
     if (result.messageFound) {
       const hasMessage = await chatPage.hasMessage(message);
       expect(hasMessage).toBe(true);
+    }
+    
+    // Validate AI response to greeting
+    try {
+      await waitForAndValidateResponse(chatPage, page, ['hello', 'hi', 'greeting', 'help', 'how can'], 30000);
+      console.log('✓ AI correctly responded to greeting "Hello"');
+    } catch (error) {
+      throw new Error(`AI did not respond to greeting "Hello". Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 

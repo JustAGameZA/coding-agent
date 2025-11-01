@@ -28,7 +28,7 @@ public static class FeedbackEndpoints
             .Produces(StatusCodes.Status200OK);
     }
 
-    private static async Task<Created> RecordFeedback(
+    private static async Task<Created<Feedback>> RecordFeedback(
         [FromBody] RecordFeedbackRequest request,
         IFeedbackService feedbackService,
         CancellationToken ct)

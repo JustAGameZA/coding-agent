@@ -140,7 +140,7 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
-      Services__MLClassifier__BaseUrl: "http://ml-classifier:8000"
+      MLClassifier__BaseUrl: "http://ml-classifier:8000"
       Services__Ollama__BaseUrl: "http://ollama-service:5003"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
       Seq__ServerUrl: "http://seq:5341"

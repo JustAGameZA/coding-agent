@@ -334,12 +334,12 @@ internal class ReflectionResultJson
 
 internal class ImprovementPlanJson
 {
-    public List<PlanStepJson>? Steps { get; set; }
+    public List<ReflectionStepJson>? Steps { get; set; }
     public string? Description { get; set; }
     public float ExpectedImprovement { get; set; }
 }
 
-internal class PlanStepJson
+internal class ReflectionStepJson
 {
     public int Order { get; set; }
     public string? Description { get; set; }

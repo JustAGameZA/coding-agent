@@ -60,6 +60,7 @@ public class ChatDbContext : DbContext
                 .ValueGeneratedNever(); // We generate GUIDs in the entity
 
             entity.Property(e => e.ConversationId).HasColumnName("conversation_id").IsRequired();
+            entity.Property(e => e.UserId).HasColumnName("user_id"); // Nullable for AI messages
             entity.Property(e => e.Content).HasColumnName("content").IsRequired().HasMaxLength(50000); // Allow long messages
             entity.Property(e => e.Role).HasColumnName("role").IsRequired().HasConversion<string>(); // Store enum as string
             entity.Property(e => e.SentAt).HasColumnName("sent_at").IsRequired();

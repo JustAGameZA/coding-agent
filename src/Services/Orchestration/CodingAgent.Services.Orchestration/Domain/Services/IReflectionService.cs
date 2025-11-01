@@ -44,7 +44,7 @@ public interface IMemoryService
     Task<IEnumerable<Episode>> RetrieveSimilarEpisodesAsync(string query, int limit, CancellationToken ct);
     
     // Episode interface for Memory Service integration
-    public interface Episode
+    interface Episode
     {
         Guid? TaskId { get; }
         Guid? ExecutionId { get; }
@@ -66,6 +66,25 @@ public class ImprovementPlan
     public List<ProcedureStep> Steps { get; set; } = new();
     public string Description { get; set; } = string.Empty;
     public float ExpectedImprovement { get; set; }
+}
+
+/// <summary>
+/// Step in an improvement procedure
+/// </summary>
+public class ProcedureStep
+{
+    public ProcedureStep(int order, string description, Dictionary<string, object>? parameters = null, string? validationCriteria = null)
+    {
+        Order = order;
+        Description = description;
+        Parameters = parameters ?? new Dictionary<string, object>();
+        ValidationCriteria = validationCriteria;
+    }
+
+    public int Order { get; set; }
+    public string Description { get; set; }
+    public Dictionary<string, object> Parameters { get; set; }
+    public string? ValidationCriteria { get; set; }
 }
 
 /// <summary>

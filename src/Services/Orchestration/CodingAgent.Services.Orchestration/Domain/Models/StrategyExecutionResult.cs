@@ -6,6 +6,7 @@ namespace CodingAgent.Services.Orchestration.Domain.Models;
 public class StrategyExecutionResult
 {
     public bool Success { get; init; }
+    public bool HasPartialSuccess { get; init; } // Indicates partial success (some changes made but errors occurred)
     public List<CodeChange> Changes { get; init; } = new();
     public int TotalTokensUsed { get; init; }
     public decimal TotalCostUSD { get; init; }

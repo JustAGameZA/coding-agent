@@ -134,10 +134,17 @@ services:
       ASPNETCORE_URLS: "http://0.0.0.0:5002"
       DOTNET_USE_POLLING_FILE_WATCHER: "false"
       DOTNET_NUGET_SIGNATURE_VERIFICATION: "false"
+      Messaging__Enabled: "true"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-codingagent}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-devPassword123!}
-      Services__MLClassifier__BaseUrl: "http://ml-classifier:8000"
+      Chat__ServiceUrl: "http://chat-service:5001"
+      Jwt__Secret: "${JWT_SECRET:-CHANGE_THIS_TO_A_SECURE_SECRET_KEY_AT_LEAST_32_CHARACTERS_LONG}"
+      Jwt__Issuer: "http://localhost:5000"
+      Jwt__Audience: "coding-agent-api"
+      Ollama__BaseUrl: "http://ollama:11434"
+      Ollama__TimeoutMs: "60000"
+      MLClassifier__BaseUrl: "http://ml-classifier:8000"
       OpenTelemetry__Endpoint: "http://jaeger:4317"
     volumes:
       - ../../:/workspace

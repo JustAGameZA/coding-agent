@@ -58,7 +58,8 @@ public class ExecutionCoordinator : IExecutionCoordinator
         // Agentic AI: Create plan for complex tasks if planning service is available
         Plan? plan = null;
         if (_planningService != null && 
-            (task.Complexity == Domain.ValueObjects.TaskComplexity.High || 
+            (task.Complexity == Domain.ValueObjects.TaskComplexity.Complex || 
+             task.Complexity == Domain.ValueObjects.TaskComplexity.Epic ||
              task.Description.Contains("multiple") || 
              task.Description.Contains("all")))
         {
@@ -67,7 +68,7 @@ public class ExecutionCoordinator : IExecutionCoordinator
                 _logger.LogInformation("Creating plan for complex task {TaskId}", task.Id);
                 plan = await _planningService.CreatePlanAsync(
                     task.Description,
-                    task.Context ?? "",
+                    "", // Context not available on CodingTask entity
                     cancellationToken);
             }
             catch (Exception ex)

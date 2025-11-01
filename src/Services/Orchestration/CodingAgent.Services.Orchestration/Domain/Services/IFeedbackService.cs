@@ -52,6 +52,7 @@ public class FeedbackPattern
 {
     public Guid ProcedureId { get; set; }
     public float NewSuccessRate { get; set; }
+    // Note: ProcedureStep is defined in IReflectionService.cs in the same namespace
     public List<ProcedureStep> ImprovedSteps { get; set; } = new();
     public string PatternDescription { get; set; } = string.Empty;
 }

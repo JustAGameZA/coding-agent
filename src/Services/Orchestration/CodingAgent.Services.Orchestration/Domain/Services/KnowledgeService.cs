@@ -36,7 +36,7 @@ public class KnowledgeService : IKnowledgeService
         return Task.CompletedTask;
     }
 
-    public async Task<IEnumerable<KnowledgeItem>> SearchKnowledgeAsync(
+    public Task<IEnumerable<KnowledgeItem>> SearchKnowledgeAsync(
         string query,
         float threshold,
         int limit,
@@ -49,16 +49,23 @@ public class KnowledgeService : IKnowledgeService
         {
             try
             {
-                var semanticResults = await _memoryService.SearchSemanticMemoryAsync(query, threshold, limit, ct);
+                // TODO: Implement SearchSemanticMemoryAsync in IMemoryService when Memory Service is integrated
+                // For now, return empty results
+                _logger.LogDebug(
+                    "Semantic memory search requested but not yet available. " +
+                    "This will be implemented when Memory Service is integrated.");
                 
-                // Convert semantic memories to knowledge items
-                return semanticResults.Select(sm => new KnowledgeItem
-                {
-                    Id = sm.Id,
-                    ContentType = sm.ContentType,
-                    Content = sm.Content,
-                    Metadata = sm.Metadata
-                });
+                // Future implementation:
+                // var semanticResults = await _memoryService.SearchSemanticMemoryAsync(query, threshold, limit, ct);
+                // return semanticResults.Select(sm => new KnowledgeItem
+                // {
+                //     Id = sm.Id,
+                //     ContentType = sm.ContentType,
+                //     Content = sm.Content,
+                //     Metadata = sm.Metadata
+                // });
+                
+                return Task.FromResult(Enumerable.Empty<KnowledgeItem>());
             }
             catch (Exception ex)
             {
@@ -67,11 +74,12 @@ public class KnowledgeService : IKnowledgeService
         }
 
         // Fallback: simple text search
-        return _knowledgeIndex.Values
+        var results = _knowledgeIndex.Values
             .Where(k => k.Content.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                        k.ContentType.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Take(limit)
             .ToList();
+        return Task.FromResult<IEnumerable<KnowledgeItem>>(results);
     }
 
     public async Task<KnowledgeContext> BuildContextAsync(string query, CancellationToken ct)

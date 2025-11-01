@@ -19,7 +19,7 @@ public class FeedbackService : IFeedbackService
         _memoryService = memoryService;
     }
 
-    public async Task RecordFeedbackAsync(Feedback feedback, CancellationToken ct)
+    public Task RecordFeedbackAsync(Feedback feedback, CancellationToken ct)
     {
         _logger.LogInformation("Recording feedback {FeedbackId} for task {TaskId}, type: {Type}", 
             feedback.Id, feedback.TaskId, feedback.Type);
@@ -29,37 +29,48 @@ public class FeedbackService : IFeedbackService
         _feedbacks.Add(feedback);
 
         // Update procedural memory based on feedback
+        // Note: UpdateProcedureSuccessRateAsync is not yet available in IMemoryService
+        // This will be implemented when Memory Service is fully integrated
         if (_memoryService != null && feedback.ProcedureId.HasValue)
         {
             try
             {
-                if (feedback.Type == FeedbackType.Positive)
-                {
-                    // Increase procedure confidence
-                    await _memoryService.UpdateProcedureSuccessRateAsync(
-                        feedback.ProcedureId.Value,
-                        true,
-                        TimeSpan.Zero, // Execution time not available from feedback
-                        ct);
-                }
-                else if (feedback.Type == FeedbackType.Negative)
-                {
-                    // Decrease procedure confidence
-                    await _memoryService.UpdateProcedureSuccessRateAsync(
-                        feedback.ProcedureId.Value,
-                        false,
-                        TimeSpan.Zero,
-                        ct);
-                }
+                // TODO: Implement UpdateProcedureSuccessRateAsync in IMemoryService when Memory Service is integrated
+                // For now, we log the feedback but don't update procedural memory
+                _logger.LogDebug(
+                    "Feedback received for procedure {ProcedureId}, type: {Type}. " +
+                    "Procedural memory update will be implemented when Memory Service is integrated.",
+                    feedback.ProcedureId.Value,
+                    feedback.Type);
+                
+                // Future implementation:
+                // if (feedback.Type == FeedbackType.Positive)
+                // {
+                //     await _memoryService.UpdateProcedureSuccessRateAsync(
+                //         feedback.ProcedureId.Value,
+                //         true,
+                //         TimeSpan.Zero,
+                //         ct);
+                // }
+                // else if (feedback.Type == FeedbackType.Negative)
+                // {
+                //     await _memoryService.UpdateProcedureSuccessRateAsync(
+                //         feedback.ProcedureId.Value,
+                //         false,
+                //         TimeSpan.Zero,
+                //         ct);
+                // }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to update procedural memory from feedback");
+                _logger.LogWarning(ex, "Failed to process feedback for procedural memory");
             }
         }
+        
+        return Task.CompletedTask;
     }
 
-    public async Task<FeedbackAnalysis> AnalyzeFeedbackPatternsAsync(Guid taskId, CancellationToken ct)
+    public Task<FeedbackAnalysis> AnalyzeFeedbackPatternsAsync(Guid taskId, CancellationToken ct)
     {
         _logger.LogInformation("Analyzing feedback patterns for task {TaskId}", taskId);
 
@@ -67,25 +78,25 @@ public class FeedbackService : IFeedbackService
 
         if (!feedbacks.Any())
         {
-            return new FeedbackAnalysis
+            return Task.FromResult(new FeedbackAnalysis
             {
                 TaskId = taskId,
                 Patterns = new List<FeedbackPattern>(),
                 Recommendations = new List<string>(),
                 HasSignificantChanges = false
-            };
+            });
         }
 
         // Simple pattern analysis - in production, use ML clustering
         var patterns = AnalyzePatterns(feedbacks);
 
-        return new FeedbackAnalysis
+        return Task.FromResult(new FeedbackAnalysis
         {
             TaskId = taskId,
             Patterns = patterns,
             Recommendations = GenerateRecommendations(patterns),
             HasSignificantChanges = patterns.Any(p => Math.Abs(p.NewSuccessRate - 0.5f) > 0.2f)
-        };
+        });
     }
 
     public Task UpdateModelParametersAsync(FeedbackAnalysis analysis, CancellationToken ct)

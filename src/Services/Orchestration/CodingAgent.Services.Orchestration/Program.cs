@@ -17,6 +17,8 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Threading.RateLimiting;
+using System.Reflection;
+using System.Linq;
 using Polly;
 using Polly.Extensions.Http;
 using CodingAgent.Services.Orchestration.Domain.ValueObjects;
@@ -97,15 +99,43 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // Messaging configuration: enable MassTransit only when explicitly enabled and configured
-var messagingEnabled = builder.Configuration.GetValue<bool?>("Messaging:Enabled") ?? false;
+// ASP.NET Core maps environment variables with double underscores to configuration paths with colons
+// So "Messaging__Enabled" becomes "Messaging:Enabled"
+var messagingEnabledRaw = builder.Configuration["Messaging:Enabled"];
+var messagingEnabled = bool.TryParse(messagingEnabledRaw, out var messagingFlag) && messagingFlag;
 var rabbitConfigured = builder.Configuration.IsRabbitMQConfigured();
+
+// Diagnostic logging
+var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
+var diagnosticLogger = loggerFactory.CreateLogger("MassTransit.Diagnostic");
+
+diagnosticLogger.LogInformation(
+    "[Diagnostic] Messaging configuration check: Messaging:Enabled raw value='{RawValue}', parsed={MessagingEnabled}, RabbitMQ configured={RabbitConfigured}",
+    messagingEnabledRaw ?? "null",
+    messagingEnabled,
+    rabbitConfigured);
+
+if (rabbitConfigured)
+{
+    var rabbitHost = builder.Configuration["RabbitMQ:Host"];
+    var rabbitUser = builder.Configuration["RabbitMQ:Username"];
+    diagnosticLogger.LogInformation(
+        "[Diagnostic] RabbitMQ configuration: Host={Host}, Username={Username}",
+        rabbitHost ?? "null",
+        rabbitUser ?? "null");
+}
 
 if (messagingEnabled && rabbitConfigured)
 {
+    diagnosticLogger.LogInformation("[Diagnostic] MassTransit will be enabled - using MassTransitEventPublisher");
     builder.Services.AddScoped<IEventPublisher, MassTransitEventPublisher>();
 }
 else
 {
+    diagnosticLogger.LogWarning(
+        "[Diagnostic] MassTransit will NOT be enabled - using NoOpEventPublisher (messagingEnabled={MessagingEnabled}, rabbitConfigured={RabbitConfigured})",
+        messagingEnabled,
+        rabbitConfigured);
     // Fallback to no-op publisher for local/dev/test where RabbitMQ isn't available
     builder.Services.AddScoped<IEventPublisher, NoOpEventPublisher>();
 }
@@ -115,8 +145,18 @@ var serviceName = "CodingAgent.Services.Orchestration";
 var serviceVersion = "2.0.0";
 
 // Register execution strategies and dependencies
-// TODO: Replace mock implementations with real LLM and validator implementations in future phases
-builder.Services.AddScoped<ILlmClient, MockLlmClient>();
+builder.Services.AddHttpClient<ILlmClient, OllamaLlmClient>(client =>
+{
+    var ollamaUrl = builder.Configuration["Ollama:BaseUrl"] ?? "http://ollama:11434";
+    client.BaseAddress = new Uri(ollamaUrl);
+    var timeoutMs = builder.Configuration.GetValue<int?>("Ollama:TimeoutMs")
+        ?? (builder.Environment.IsProduction() ? 30000 : 60000);
+    client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy())
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler()); // Ensure HttpClient is configured
+
 builder.Services.AddScoped<ICodeValidator, MockCodeValidator>();
 
 // Register ActivitySource for distributed tracing
@@ -151,6 +191,21 @@ builder.Services.AddHttpClient<IGitHubClient, GitHubClient>(client =>
     var githubServiceUrl = builder.Configuration["GitHub:ServiceUrl"] ?? "http://localhost:5004";
     client.BaseAddress = new Uri(githubServiceUrl);
     var timeoutMs = builder.Configuration.GetValue<int?>("GitHub:TimeoutMs")
+        ?? (builder.Environment.IsProduction() ? 5000 : 10000);
+    client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+// Register service token generator for service-to-service authentication
+builder.Services.AddSingleton<CodingAgent.Services.Orchestration.Infrastructure.Security.ServiceTokenGenerator>();
+
+// Register Chat service HTTP client for posting AI responses
+builder.Services.AddHttpClient<ChatServiceClient>(client =>
+{
+    var chatServiceUrl = builder.Configuration["Chat:ServiceUrl"] ?? "http://localhost:5001";
+    client.BaseAddress = new Uri(chatServiceUrl);
+    var timeoutMs = builder.Configuration.GetValue<int?>("Chat:TimeoutMs")
         ?? (builder.Environment.IsProduction() ? 5000 : 10000);
     client.Timeout = TimeSpan.FromMilliseconds(timeoutMs);
 })
@@ -204,17 +259,58 @@ builder.Services.AddOpenTelemetry()
 // MassTransit + RabbitMQ with event publishing configuration (enabled only when configured)
 if (messagingEnabled && rabbitConfigured)
 {
+    diagnosticLogger.LogInformation("[Diagnostic] Configuring MassTransit with RabbitMQ");
+    
     builder.Services.AddMassTransit(x =>
     {
         x.SetKebabCaseEndpointNameFormatter();
+        
+        // Register consumers and log them
         x.AddConsumers(typeof(Program).Assembly);
+        var consumerCount = typeof(Program).Assembly
+            .GetTypes()
+            .Count(t => typeof(IConsumer).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+        diagnosticLogger.LogInformation(
+            "[Diagnostic] Registered {Count} consumer(s) from Assembly",
+            consumerCount);
+        
+        // Log consumer names for debugging
+        var consumerTypes = typeof(Program).Assembly
+            .GetTypes()
+            .Where(t => typeof(IConsumer).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+            .ToList();
+        foreach (var consumerType in consumerTypes)
+        {
+            diagnosticLogger.LogInformation("[Diagnostic] Found consumer: {ConsumerType}", consumerType.Name);
+        }
 
         x.UsingRabbitMq((context, cfg) =>
         {
+            var rabbitHost = builder.Configuration["RabbitMQ:Host"];
+            var rabbitUser = builder.Configuration["RabbitMQ:Username"];
+            var rabbitPass = builder.Configuration["RabbitMQ:Password"];
+            
+            diagnosticLogger.LogInformation(
+                "[Diagnostic] Configuring RabbitMQ connection: Host={Host}, Username={Username}, Password set={HasPassword}",
+                rabbitHost ?? "null",
+                rabbitUser ?? "null",
+                !string.IsNullOrEmpty(rabbitPass));
+            
             cfg.ConfigureEventPublishingForRabbitMq(builder.Configuration, builder.Environment);
             cfg.ConfigureEndpoints(context);
+            
+            diagnosticLogger.LogInformation("[Diagnostic] RabbitMQ bus factory configured");
         });
     });
+    
+    diagnosticLogger.LogInformation("[Diagnostic] MassTransit configuration complete");
+}
+else
+{
+    diagnosticLogger.LogWarning(
+        "[Diagnostic] MassTransit will NOT be configured (messagingEnabled={MessagingEnabled}, rabbitConfigured={RabbitConfigured})",
+        messagingEnabled,
+        rabbitConfigured);
 }
 
 // API documentation

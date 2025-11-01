@@ -54,6 +54,13 @@ builder.Services.AddDbContext<CICDMonitorDbContext>(options =>
     if (!string.IsNullOrEmpty(connectionString))
     {
         options.UseNpgsql(connectionString);
+        
+        // Suppress pending model changes warning in development to allow migrations to apply
+        if (!builder.Environment.IsProduction())
+        {
+            options.ConfigureWarnings(warnings =>
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        }
     }
 });
 
@@ -150,9 +157,16 @@ var app = builder.Build();
 var runMigrations = app.Configuration.GetValue<bool?>("RunMigrationsOnStartup") ?? false;
 if (app.Environment.IsDevelopment() && runMigrations)
 {
-    using var scope = app.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<CICDMonitorDbContext>();
-    await dbContext.Database.MigrateAsync();
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CICDMonitorDbContext>();
+        await dbContext.Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Failed to apply migrations on startup. Continuing without migrations.");
+    }
 }
 // Map health endpoint
 app.MapHealthChecks("/health");

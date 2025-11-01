@@ -107,8 +107,9 @@ builder.Services.Configure<FormOptions>(options =>
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:Secret"];
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CodingAgent";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CodingAgent.API";
+// Match Orchestration Service defaults for service-to-service authentication
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "http://localhost:5000";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "coding-agent-api";
 
 if (!string.IsNullOrEmpty(jwtSecret))
 {

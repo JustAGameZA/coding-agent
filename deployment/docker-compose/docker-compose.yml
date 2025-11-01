@@ -391,13 +391,13 @@ services:
     networks:
       - coding-agent
     # GPU support - uncomment for NVIDIA GPUs
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       # Use ollama CLI which is available in the container
       test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
